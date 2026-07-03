@@ -27,6 +27,151 @@ import {
   resetLocalStorage
 } from "./lib/storage";
 
+// Database Model Mapping Helper Functions
+function mapProfileFromDB(dbProfile: any): UserProfile {
+  return {
+    name: dbProfile.name,
+    email: dbProfile.email,
+    phone: dbProfile.phone || "",
+    city: dbProfile.city || "Lahore",
+    avatar: dbProfile.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150",
+    walletBalance: Number(dbProfile.wallet_balance ?? 15000),
+    isAdmin: Boolean(dbProfile.is_admin),
+    selectedRole: dbProfile.selected_role || undefined,
+  };
+}
+
+function mapProfileToDB(profile: UserProfile, userId: string): any {
+  return {
+    id: userId,
+    name: profile.name,
+    email: profile.email,
+    phone: profile.phone,
+    city: profile.city,
+    avatar: profile.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150",
+    wallet_balance: profile.walletBalance,
+    is_admin: profile.isAdmin,
+    selected_role: profile.selectedRole || null,
+    updated_at: new Date().toISOString()
+  };
+}
+
+function mapCompanionFromDB(c: any): Companion {
+  return {
+    id: c.id,
+    name: c.name,
+    age: Number(c.age),
+    gender: c.gender,
+    city: c.city,
+    avatar: c.avatar,
+    bio: c.bio,
+    rating: Number(c.rating ?? 5.0),
+    reviewsCount: Number(c.reviews_count ?? 0),
+    languages: c.languages || [],
+    interests: c.interests || [],
+    services: c.services || [],
+    status: c.status,
+    isOnline: Boolean(c.is_online),
+    featured: Boolean(c.featured),
+    tagline: c.tagline || undefined,
+    cnic: c.cnic || undefined,
+    mobile: c.mobile || undefined
+  };
+}
+
+function mapCompanionToDB(c: Companion, userId?: string | null): any {
+  return {
+    id: c.id,
+    name: c.name,
+    age: c.age,
+    gender: c.gender,
+    city: c.city,
+    avatar: c.avatar,
+    bio: c.bio,
+    rating: c.rating,
+    reviews_count: c.reviewsCount,
+    languages: c.languages,
+    interests: c.interests,
+    services: c.services,
+    status: c.status,
+    is_online: c.isOnline,
+    featured: c.featured,
+    tagline: c.tagline || null,
+    cnic: c.cnic || null,
+    mobile: c.mobile || null,
+    user_id: userId || null
+  };
+}
+
+function mapBookingFromDB(b: any): Booking {
+  return {
+    id: b.id,
+    companionId: b.companion_id,
+    companionName: b.companion_name,
+    companionAvatar: b.companion_avatar,
+    serviceId: b.service_id,
+    serviceName: b.service_name,
+    date: b.date,
+    time: b.time,
+    duration: Number(b.duration),
+    totalPrice: Number(b.total_price),
+    status: b.status,
+    paymentMethod: b.payment_method || undefined,
+    paymentNumber: b.payment_number || undefined,
+    meetingLocationType: b.meeting_location_type || undefined,
+    meetingAddress: b.meeting_address || undefined,
+    meetingInstructions: b.meeting_instructions || undefined,
+    createdAt: b.created_at
+  };
+}
+
+function mapBookingToDB(b: Booking, userId: string): any {
+  return {
+    id: b.id,
+    companion_id: b.companionId,
+    companion_name: b.companionName,
+    companion_avatar: b.companionAvatar,
+    service_id: b.serviceId,
+    service_name: b.serviceName,
+    date: b.date,
+    time: b.time,
+    duration: b.duration,
+    total_price: b.totalPrice,
+    status: b.status,
+    payment_method: b.paymentMethod || null,
+    payment_number: b.paymentNumber || null,
+    meeting_location_type: b.meetingLocationType || null,
+    meeting_address: b.meetingAddress || null,
+    meeting_instructions: b.meetingInstructions || null,
+    user_id: userId
+  };
+}
+
+function mapReviewFromDB(r: any): Review {
+  return {
+    id: r.id,
+    companionId: r.companion_id,
+    userName: r.user_name,
+    userAvatar: r.user_avatar,
+    rating: Number(r.rating),
+    comment: r.comment,
+    date: r.date
+  };
+}
+
+function mapReviewToDB(r: Review, userId?: string | null): any {
+  return {
+    id: r.id,
+    companion_id: r.companionId,
+    user_name: r.userName,
+    user_avatar: r.userAvatar,
+    rating: r.rating,
+    comment: r.comment,
+    date: r.date,
+    user_id: userId || null
+  };
+}
+
 export default function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -51,50 +196,126 @@ export default function App() {
     meetingInstructions?: string;
   } | null>(null);
 
-  // Initial Seed Loading
+  // Load Companions, Reviews and Bookings from Supabase, or use elegant seeds as fallback
+  const loadCompanionsAndReviews = async (currentProfile: UserProfile | null, userId?: string) => {
+    try {
+      // 1. Fetch companions from Supabase
+      const { data: dbCompanions, error: compError } = await supabase
+        .from("companions")
+        .select("*")
+        .order("created_at", { ascending: true });
+
+      if (!compError && dbCompanions && dbCompanions.length > 0) {
+        setCompanions(dbCompanions.map(mapCompanionFromDB));
+      } else {
+        const localComps = getStoredCompanions();
+        setCompanions(localComps);
+
+        // Seed companions table if empty and user is logged in
+        if (!compError && (!dbCompanions || dbCompanions.length === 0) && userId) {
+          const seedData = localComps.map(c => mapCompanionToDB(c));
+          await supabase.from("companions").insert(seedData);
+        }
+      }
+
+      // 2. Fetch reviews from Supabase
+      const { data: dbReviews, error: revError } = await supabase
+        .from("reviews")
+        .select("*")
+        .order("created_at", { ascending: true });
+
+      if (!revError && dbReviews && dbReviews.length > 0) {
+        setReviews(dbReviews.map(mapReviewFromDB));
+      } else {
+        const localReviews = getStoredReviews();
+        setReviews(localReviews);
+
+        // Seed reviews table if empty and user is logged in
+        if (!revError && (!dbReviews || dbReviews.length === 0) && userId) {
+          const seedData = localReviews.map(r => mapReviewToDB(r));
+          await supabase.from("reviews").insert(seedData);
+        }
+      }
+
+      // 3. Fetch Bookings from Supabase
+      if (userId) {
+        let bookingsQuery = supabase.from("bookings").select("*").order("created_at", { ascending: false });
+        if (currentProfile && !currentProfile.isAdmin) {
+          bookingsQuery = bookingsQuery.eq("user_id", userId);
+        }
+        const { data: dbBookings, error: bookError } = await bookingsQuery;
+        if (!bookError && dbBookings) {
+          setBookings(dbBookings.map(mapBookingFromDB));
+        } else {
+          setBookings(getStoredBookings());
+        }
+      } else {
+        setBookings([]);
+      }
+    } catch (err) {
+      console.error("Failed to load data from Supabase, falling back to offline seeds:", err);
+      setCompanions(getStoredCompanions());
+      setReviews(getStoredReviews());
+      setBookings(getStoredBookings());
+    }
+  };
+
+  // Initial Session Checking and Data Synchronization
   useEffect(() => {
-    setCompanions(getStoredCompanions());
-    setBookings(getStoredBookings());
-    setReviews(getStoredReviews());
-    
-    // Check if user session exists in Supabase, and synchronize with localStorage profile
     const checkSupabaseSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        // Force redirect to login page (user is null)
         setUser(null);
         localStorage.removeItem("yarana_profile");
+        loadCompanionsAndReviews(null);
       } else {
-        const storedUser = localStorage.getItem("yarana_profile");
-        if (storedUser) {
-          const parsedUser = JSON.parse(storedUser);
-          parsedUser.email = session.user.email || parsedUser.email;
-          setUser(parsedUser);
-          if (parsedUser.isAdmin) {
+        const userId = session.user.id;
+        let profileData: UserProfile | null = null;
+
+        try {
+          // Fetch or upsert user profile in profiles table
+          const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+          if (data) {
+            profileData = mapProfileFromDB(data);
+          } else {
+            const email = session.user.email || "";
+            const metadata = session.user.user_metadata || {};
+            const isAdmin = email.toLowerCase() === "admin@yarana.pk";
+            const initialProfile: UserProfile = {
+              name: metadata.name || email.split("@")[0].split(".").map((s: string) => s.charAt(0).toUpperCase() + s.slice(1)).join(" ") || "Yarana Member",
+              email: email,
+              phone: metadata.phone || "0300-1234567",
+              city: metadata.city || "Lahore",
+              avatar: metadata.avatar || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150`,
+              walletBalance: 15000,
+              isAdmin: isAdmin,
+            };
+            const { error: insertError } = await supabase.from("profiles").insert(mapProfileToDB(initialProfile, userId));
+            if (!insertError) {
+              profileData = initialProfile;
+            }
+          }
+        } catch (e) {
+          console.error("Profiles sync failed, falling back to local storage:", e);
+        }
+
+        if (profileData) {
+          setUser(profileData);
+          saveStoredProfile(profileData);
+          if (profileData.isAdmin) {
             setCurrentTab("admin");
-          } else if (parsedUser.selectedRole === "companion") {
+          } else if (profileData.selectedRole === "companion") {
             setCurrentTab("become_companion");
           } else {
             setCurrentTab("browse");
           }
+          loadCompanionsAndReviews(profileData, userId);
         } else {
-          // If a session exists in Supabase but we don't have localStorage synced yet (e.g. refresh / hard load)
-          const email = session.user.email || "";
-          const metadata = session.user.user_metadata || {};
-          const isAdmin = email.toLowerCase() === "admin@yarana.pk";
-          const newProfile: UserProfile = {
-            name: metadata.name || email.split("@")[0].split(".").map((s: string) => s.charAt(0).toUpperCase() + s.slice(1)).join(" ") || "Yarana Member",
-            email: email,
-            phone: metadata.phone || "0300-1234567",
-            city: metadata.city || "Lahore",
-            avatar: metadata.avatar || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150`,
-            walletBalance: 15000,
-            isAdmin: isAdmin,
-          };
-          setUser(newProfile);
-          saveStoredProfile(newProfile);
-          if (isAdmin) {
-            setCurrentTab("admin");
+          const storedUser = localStorage.getItem("yarana_profile");
+          if (storedUser) {
+            const parsedUser = JSON.parse(storedUser);
+            setUser(parsedUser);
+            loadCompanionsAndReviews(parsedUser, userId);
           }
         }
       }
@@ -103,7 +324,7 @@ export default function App() {
     checkSupabaseSession();
   }, []);
 
-  // Listen to auth state changes dynamically to ensure user logout synchronizes
+  // Listen to Auth State Changes
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_OUT" || !session) {
@@ -117,10 +338,19 @@ export default function App() {
     };
   }, []);
 
-  // Update user in state and local storage
-  const handleUpdateProfile = (updated: UserProfile) => {
+  // Update User Profile in local state, localStorage, and Supabase database
+  const handleUpdateProfile = async (updated: UserProfile) => {
     setUser(updated);
     saveStoredProfile(updated);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        await supabase.from("profiles").upsert(mapProfileToDB(updated, session.user.id));
+      }
+    } catch (err) {
+      console.error("Could not save profile to Supabase database:", err);
+    }
   };
 
   // Switch roles between client (hire) and companion (become)
@@ -162,12 +392,10 @@ export default function App() {
   const handleToggleAdminRole = () => {
     if (!user) return;
     if (user.isAdmin) {
-      // Switch back to normal user with client role
       const normalUser = { ...DEFAULT_USER, selectedRole: "client" as const };
       handleUpdateProfile(normalUser);
       setCurrentTab("browse");
     } else {
-      // Switch to admin
       handleUpdateProfile(DEFAULT_ADMIN);
       setCurrentTab("admin");
     }
@@ -182,9 +410,22 @@ export default function App() {
   };
 
   // Reset application to default seeds
-  const handleResetApp = () => {
+  const handleResetApp = async () => {
     if (window.confirm("Are you sure you want to restore default demo data? All custom bookings, reviews, and host profiles will be reset.")) {
       resetLocalStorage();
+      
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          // Clear custom rows on Supabase to reset seeds
+          await supabase.from("bookings").delete().eq("user_id", session.user.id);
+          await supabase.from("reviews").delete().eq("user_id", session.user.id);
+          await supabase.from("companions").delete().eq("user_id", session.user.id);
+        }
+      } catch (err) {
+        console.error("Failed to delete database records during app reset:", err);
+      }
+
       setCompanions(getStoredCompanions());
       setBookings(getStoredBookings());
       setReviews(getStoredReviews());
@@ -195,17 +436,17 @@ export default function App() {
   };
 
   // Execute payment transaction & confirm booking
-  const handlePaymentSuccess = (method: "JazzCash" | "EasyPaisa", phoneNum: string) => {
+  const handlePaymentSuccess = async (method: "JazzCash" | "EasyPaisa", phoneNum: string) => {
     if (!user || !selectedCompanion || !checkoutBooking) return;
 
-    // Deduct amount
+    // 1. Deduct amount
     const updatedUser = {
       ...user,
       walletBalance: user.walletBalance - checkoutBooking.totalPrice
     };
-    handleUpdateProfile(updatedUser);
+    await handleUpdateProfile(updatedUser);
 
-    // Create booking
+    // 2. Create booking object
     const newBooking: Booking = {
       id: "book_" + Date.now(),
       companionId: selectedCompanion.id,
@@ -230,6 +471,15 @@ export default function App() {
     setBookings(updatedBookings);
     saveStoredBookings(updatedBookings);
 
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        await supabase.from("bookings").insert(mapBookingToDB(newBooking, session.user.id));
+      }
+    } catch (err) {
+      console.error("Failed to persist booking to database:", err);
+    }
+
     // Reset modals and switch view
     setCheckoutBooking(null);
     setSelectedCompanion(null);
@@ -237,20 +487,20 @@ export default function App() {
   };
 
   // Cancel booking and process refund
-  const handleCancelBooking = (bookingId: string) => {
+  const handleCancelBooking = async (bookingId: string) => {
     if (!user) return;
     
     const targetBooking = bookings.find(b => b.id === bookingId);
     if (!targetBooking || targetBooking.status !== "paid") return;
 
-    // Process refund
+    // 1. Process refund
     const updatedUser = {
       ...user,
       walletBalance: user.walletBalance + targetBooking.totalPrice
     };
-    handleUpdateProfile(updatedUser);
+    await handleUpdateProfile(updatedUser);
 
-    // Update booking status
+    // 2. Update booking status
     const updatedBookings = bookings.map(b => {
       if (b.id === bookingId) {
         return { ...b, status: "cancelled" as const };
@@ -260,16 +510,22 @@ export default function App() {
 
     setBookings(updatedBookings);
     saveStoredBookings(updatedBookings);
+
+    try {
+      await supabase.from("bookings").update({ status: "cancelled" }).eq("id", bookingId);
+    } catch (err) {
+      console.error("Failed to cancel booking on Supabase database:", err);
+    }
   };
 
   // Complete booking & submit review feedback
-  const handleCompleteBooking = (bookingId: string, rating: number, comment: string) => {
+  const handleCompleteBooking = async (bookingId: string, rating: number, comment: string) => {
     if (!user) return;
 
     const targetBooking = bookings.find(b => b.id === bookingId);
     if (!targetBooking) return;
 
-    // 1. Update Booking status
+    // 1. Update Booking status in local state and localStorage
     const updatedBookings = bookings.map(b => {
       if (b.id === bookingId) {
         return { ...b, status: "completed" as const };
@@ -311,10 +567,25 @@ export default function App() {
 
     setCompanions(updatedCompanions);
     saveStoredCompanions(updatedCompanions);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      // Update booking status in database
+      await supabase.from("bookings").update({ status: "completed" }).eq("id", bookingId);
+      // Insert new review
+      await supabase.from("reviews").insert(mapReviewToDB(newReview, session ? session.user.id : null));
+      // Update companion stats
+      await supabase.from("companions").update({
+        rating: avgRating,
+        reviews_count: companionReviews.length
+      }).eq("id", targetBooking.companionId);
+    } catch (err) {
+      console.error("Failed to complete booking and post feedback on Supabase:", err);
+    }
   };
 
   // ADMIN ACTION: Approve pending host application
-  const handleApproveCompanion = (id: string) => {
+  const handleApproveCompanion = async (id: string) => {
     const updatedCompanions = companions.map(c => {
       if (c.id === id) {
         return { ...c, status: CompanionStatus.APPROVED };
@@ -323,10 +594,16 @@ export default function App() {
     });
     setCompanions(updatedCompanions);
     saveStoredCompanions(updatedCompanions);
+
+    try {
+      await supabase.from("companions").update({ status: CompanionStatus.APPROVED }).eq("id", id);
+    } catch (err) {
+      console.error("Failed to approve companion in Supabase database:", err);
+    }
   };
 
   // ADMIN ACTION: Reject pending host application
-  const handleRejectCompanion = (id: string) => {
+  const handleRejectCompanion = async (id: string) => {
     const updatedCompanions = companions.map(c => {
       if (c.id === id) {
         return { ...c, status: CompanionStatus.REJECTED };
@@ -335,19 +612,32 @@ export default function App() {
     });
     setCompanions(updatedCompanions);
     saveStoredCompanions(updatedCompanions);
+
+    try {
+      await supabase.from("companions").update({ status: CompanionStatus.REJECTED }).eq("id", id);
+    } catch (err) {
+      console.error("Failed to reject companion in Supabase database:", err);
+    }
   };
 
   // ADMIN ACTION: Dissolve host profile
-  const handleRemoveCompanion = (id: string) => {
+  const handleRemoveCompanion = async (id: string) => {
     if (window.confirm("Are you absolutely sure you want to remove this companion from the database? This action is irreversible.")) {
       const updatedCompanions = companions.filter(c => c.id !== id);
       setCompanions(updatedCompanions);
       saveStoredCompanions(updatedCompanions);
+
+      try {
+        await supabase.from("companions").delete().eq("id", id);
+      } catch (err) {
+        console.error("Failed to remove companion from Supabase database:", err);
+      }
     }
   };
 
   // ADMIN ACTION: Toggle host availability
-  const handleToggleOnline = (id: string) => {
+  const handleToggleOnline = async (id: string) => {
+    const targetComp = companions.find(c => c.id === id);
     const updatedCompanions = companions.map(c => {
       if (c.id === id) {
         return { ...c, isOnline: !c.isOnline };
@@ -356,13 +646,28 @@ export default function App() {
     });
     setCompanions(updatedCompanions);
     saveStoredCompanions(updatedCompanions);
+
+    try {
+      if (targetComp) {
+        await supabase.from("companions").update({ is_online: !targetComp.isOnline }).eq("id", id);
+      }
+    } catch (err) {
+      console.error("Failed to toggle availability status in Supabase database:", err);
+    }
   };
 
   // ADMIN ACTION: Register new companion
-  const handleAddNewCompanion = (newComp: Companion) => {
+  const handleAddNewCompanion = async (newComp: Companion) => {
     const updatedCompanions = [...companions, newComp];
     setCompanions(updatedCompanions);
     saveStoredCompanions(updatedCompanions);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      await supabase.from("companions").insert(mapCompanionToDB(newComp, session ? session.user.id : null));
+    } catch (err) {
+      console.error("Failed to create new companion in Supabase database:", err);
+    }
   };
 
   return (
@@ -437,10 +742,15 @@ export default function App() {
                   reviews={reviews}
                   onSubmitApplication={handleAddNewCompanion}
                   onToggleOnline={handleToggleOnline}
-                  onResubmitApplication={(companionId) => {
+                  onResubmitApplication={async (companionId) => {
                     const updated = companions.filter(c => c.id !== companionId);
                     setCompanions(updated);
                     saveStoredCompanions(updated);
+                    try {
+                      await supabase.from("companions").delete().eq("id", companionId);
+                    } catch (err) {
+                      console.error("Failed to delete companion from database:", err);
+                    }
                   }}
                   onGoBackToRoleSelection={handleGoBackToRoleSelection}
                 />
