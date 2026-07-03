@@ -9,6 +9,7 @@ import { Companion, CompanionStatus, CompanionGender, UserProfile, Booking, Revi
 import { SERVICES } from "../data/services";
 // @ts-ignore
 import { supabase } from "../supabaseClient";
+import { countUploadedPics } from "../lib/limits";
 
 const PRESET_AVATARS = [
   { url: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=400", gender: "Female", label: "Friendly Sana" },
@@ -64,6 +65,7 @@ export default function CompanionWorkspace({
   const [presetIdx, setPresetIdx] = useState(-1);
   const [formError, setFormError] = useState("");
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [showLimitModal, setShowLimitModal] = useState(false);
 
   // Filter stats for approved hosts
   const myBookings = myCompanion ? bookings.filter(b => b.companionId === myCompanion.id) : [];
@@ -655,6 +657,14 @@ export default function CompanionWorkspace({
                         const { data: sessionData } = await supabase.auth.getSession();
                         const uid = sessionData?.session?.user?.id || "anonymous";
                         
+                        // Limit Check: Count uploaded pics first
+                        const picCount = await countUploadedPics(uid);
+                        if (picCount >= 3) {
+                          setShowLimitModal(true);
+                          setIsUploading(false);
+                          return;
+                        }
+                        
                         const uuid = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
                         const extension = file.name.split('.').pop() || 'png';
                         const filePath = `${uid}/companions/${myCompanionId}/${uuid}.${extension}`;
@@ -784,6 +794,32 @@ export default function CompanionWorkspace({
         </button>
       </form>
       </div>
+
+      {showLimitModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-3xl p-6 max-w-sm w-full border border-[#E5E1D8] shadow-2xl text-center space-y-4"
+          >
+            <div className="mx-auto w-12 h-12 bg-[#D4AF37]/10 rounded-full flex items-center justify-center text-[#D4AF37]">
+              <ShieldAlert className="w-6 h-6" />
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="text-base font-bold text-[#1A1A1A]">Free plan limit reached.</h3>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                You can only upload up to 3 pictures on the Free Plan. Upgrade to Pro to create unlimited companions and upload more pictures.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowLimitModal(false)}
+              className="w-full bg-[#1A1A1A] hover:bg-black text-white rounded-xl py-2.5 text-xs font-bold transition-all shadow-md cursor-pointer"
+            >
+              Understood
+            </button>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }

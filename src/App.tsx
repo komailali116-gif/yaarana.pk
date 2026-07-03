@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { ShieldAlert } from "lucide-react";
+import { motion } from "motion/react";
 import SplashIntro from "./components/SplashIntro";
 import AuthPage from "./components/AuthPage";
 import Navbar from "./components/Navbar";
@@ -13,6 +15,7 @@ import CompanionWorkspace from "./components/CompanionWorkspace";
 import { Companion, Booking, Review, UserProfile, CompanionStatus } from "./types";
 // @ts-ignore
 import { supabase } from "./supabaseClient";
+import { countUploadedPics } from "./lib/limits";
 import {
   getStoredCompanions,
   saveStoredCompanions,
@@ -183,6 +186,7 @@ export default function App() {
 
   // Navigation & Dialog states
   const [currentTab, setCurrentTab] = useState("browse");
+  const [showLimitModal, setShowLimitModal] = useState(false);
   const [selectedCompanion, setSelectedCompanion] = useState<Companion | null>(null);
   const [checkoutBooking, setCheckoutBooking] = useState<{
     serviceId: string;
@@ -707,6 +711,23 @@ export default function App() {
 
   // ADMIN ACTION: Register new companion
   const handleAddNewCompanion = async (newComp: Companion) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const uid = session?.user?.id;
+      if (uid) {
+        const isCustomAvatar = newComp.avatar && !newComp.avatar.startsWith("http") && !newComp.avatar.startsWith("data:");
+        if (isCustomAvatar) {
+          const picCount = await countUploadedPics(uid);
+          if (picCount >= 3) {
+            setShowLimitModal(true);
+            return;
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed limit check in handleAddNewCompanion:", err);
+    }
+
     const updatedCompanions = [...companions, newComp];
     setCompanions(updatedCompanions);
     saveStoredCompanions(updatedCompanions);
@@ -901,6 +922,32 @@ export default function App() {
             </div>
           </footer>
         </>
+      )}
+
+      {showLimitModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-3xl p-6 max-w-sm w-full border border-[#E5E1D8] shadow-2xl text-center space-y-4"
+          >
+            <div className="mx-auto w-12 h-12 bg-[#D4AF37]/10 rounded-full flex items-center justify-center text-[#D4AF37]">
+              <ShieldAlert className="w-6 h-6" />
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="text-base font-bold text-[#1A1A1A]">Free plan limit reached.</h3>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                You can only upload up to 3 pictures on the Free Plan. Upgrade to Pro to create unlimited companions and upload more pictures.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowLimitModal(false)}
+              className="w-full bg-[#1A1A1A] hover:bg-black text-white rounded-xl py-2.5 text-xs font-bold transition-all shadow-md cursor-pointer"
+            >
+              Understood
+            </button>
+          </motion.div>
+        </div>
       )}
 
     </div>
