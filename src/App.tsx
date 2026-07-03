@@ -11,6 +11,8 @@ import AdminPanel from "./components/AdminPanel";
 import RoleSelectionPage from "./components/RoleSelectionPage";
 import CompanionWorkspace from "./components/CompanionWorkspace";
 import { Companion, Booking, Review, UserProfile, CompanionStatus } from "./types";
+// @ts-ignore
+import { supabase } from "./supabaseClient";
 import {
   getStoredCompanions,
   saveStoredCompanions,
@@ -55,19 +57,64 @@ export default function App() {
     setBookings(getStoredBookings());
     setReviews(getStoredReviews());
     
-    // Check if user session exists in localStorage
-    const storedUser = localStorage.getItem("yarana_profile");
-    if (storedUser) {
-      const parsedUser = JSON.parse(storedUser);
-      setUser(parsedUser);
-      if (parsedUser.isAdmin) {
-        setCurrentTab("admin");
-      } else if (parsedUser.selectedRole === "companion") {
-        setCurrentTab("become_companion");
+    // Check if user session exists in Supabase, and synchronize with localStorage profile
+    const checkSupabaseSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        // Force redirect to login page (user is null)
+        setUser(null);
+        localStorage.removeItem("yarana_profile");
       } else {
-        setCurrentTab("browse");
+        const storedUser = localStorage.getItem("yarana_profile");
+        if (storedUser) {
+          const parsedUser = JSON.parse(storedUser);
+          parsedUser.email = session.user.email || parsedUser.email;
+          setUser(parsedUser);
+          if (parsedUser.isAdmin) {
+            setCurrentTab("admin");
+          } else if (parsedUser.selectedRole === "companion") {
+            setCurrentTab("become_companion");
+          } else {
+            setCurrentTab("browse");
+          }
+        } else {
+          // If a session exists in Supabase but we don't have localStorage synced yet (e.g. refresh / hard load)
+          const email = session.user.email || "";
+          const metadata = session.user.user_metadata || {};
+          const isAdmin = email.toLowerCase() === "admin@yarana.pk";
+          const newProfile: UserProfile = {
+            name: metadata.name || email.split("@")[0].split(".").map((s: string) => s.charAt(0).toUpperCase() + s.slice(1)).join(" ") || "Yarana Member",
+            email: email,
+            phone: metadata.phone || "0300-1234567",
+            city: metadata.city || "Lahore",
+            avatar: metadata.avatar || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150`,
+            walletBalance: 15000,
+            isAdmin: isAdmin,
+          };
+          setUser(newProfile);
+          saveStoredProfile(newProfile);
+          if (isAdmin) {
+            setCurrentTab("admin");
+          }
+        }
       }
-    }
+    };
+
+    checkSupabaseSession();
+  }, []);
+
+  // Listen to auth state changes dynamically to ensure user logout synchronizes
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT" || !session) {
+        setUser(null);
+        localStorage.removeItem("yarana_profile");
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Update user in state and local storage
@@ -130,6 +177,7 @@ export default function App() {
   const handleLogout = () => {
     setUser(null);
     localStorage.removeItem("yarana_profile");
+    supabase.auth.signOut();
     setCurrentTab("browse");
   };
 

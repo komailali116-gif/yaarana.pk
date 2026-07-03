@@ -18,11 +18,13 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
   const [phone, setPhone] = useState("");
   const [city, setCity] = useState("Lahore");
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setSuccessMessage("");
     setLoading(true);
 
     if (isLogin) {
@@ -88,6 +90,13 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
           return;
         }
 
+        // Check if session is null (means email verification is enabled)
+        if (!data.session) {
+          setSuccessMessage("Check your email and confirm your account before logging in.");
+          setLoading(false);
+          return;
+        }
+
         onLoginSuccess({
           name: name,
           email: email,
@@ -105,12 +114,25 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
     }
   };
 
-  const handleGoogleSignIn = () => {
+  const handleGoogleSignIn = async () => {
+    setError("");
+    setSuccessMessage("");
     setLoading(true);
-    setTimeout(() => {
-      onLoginSuccess(DEFAULT_USER);
+    try {
+      const { error: sbError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: window.location.origin,
+        },
+      });
+      if (sbError) {
+        setError(sbError.message);
+        setLoading(false);
+      }
+    } catch (err: any) {
+      setError(err.message || "An unexpected error occurred during Google sign in.");
       setLoading(false);
-    }, 1200);
+    }
   };
 
   const fillTestCredentials = (isAdminAcc: boolean) => {
@@ -153,6 +175,12 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
         {error && (
           <div className="bg-red-50 border border-red-100 text-red-700 px-4 py-3 rounded-2xl text-xs font-semibold" id="auth-error">
             {error}
+          </div>
+        )}
+
+        {successMessage && (
+          <div className="bg-emerald-50 border border-emerald-100 text-emerald-800 px-4 py-3 rounded-2xl text-xs font-semibold" id="auth-success">
+            {successMessage}
           </div>
         )}
 
@@ -306,6 +334,7 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
             onClick={() => {
               setIsLogin(!isLogin);
               setError("");
+              setSuccessMessage("");
             }}
             className="text-[#D4AF37] hover:underline font-bold cursor-pointer"
           >
