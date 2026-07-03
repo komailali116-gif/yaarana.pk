@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import { Companion, CompanionStatus, CompanionGender, UserProfile, Booking, Review, PAKISTAN_CITIES, PakistanCity } from "../types";
 import { SERVICES } from "../data/services";
+// @ts-ignore
+import { supabase } from "../supabaseClient";
 
 const PRESET_AVATARS = [
   { url: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=400", gender: "Female", label: "Friendly Sana" },
@@ -57,6 +59,8 @@ export default function CompanionWorkspace({
   const [formBio, setFormBio] = useState("");
   const [formServices, setFormServices] = useState<string[]>(["dining", "call", "study"]);
   const [formAvatar, setFormAvatar] = useState("");
+  const [avatarPreview, setAvatarPreview] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
   const [presetIdx, setPresetIdx] = useState(-1);
   const [formError, setFormError] = useState("");
   const [submitSuccess, setSubmitSuccess] = useState(false);
@@ -634,23 +638,51 @@ export default function CompanionWorkspace({
             <div>
               <span className="block text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Option 2: Direct File Upload</span>
               <label className="flex items-center justify-center gap-2 p-2.5 border border-dashed border-[#E5E1D8] hover:border-[#D4AF37] rounded-xl bg-white cursor-pointer transition-all hover:bg-gray-50 text-xs text-gray-600 font-semibold">
-                <Upload className="w-4 h-4 text-[#D4AF37]" />
-                <span>Upload Profile Image</span>
+                <Upload className={`w-4 h-4 text-[#D4AF37] ${isUploading ? "animate-bounce" : ""}`} />
+                <span>{isUploading ? "Uploading..." : "Upload Profile Image"}</span>
                 <input
                   type="file"
                   accept="image/*"
                   className="hidden"
-                  onChange={(e) => {
+                  disabled={isUploading}
+                  onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (file) {
-                      const reader = new FileReader();
-                      reader.onloadend = () => {
-                        if (typeof reader.result === "string") {
-                          setFormAvatar(reader.result);
-                          setPresetIdx(-2);
+                      setIsUploading(true);
+                      setFormError("");
+                      
+                      try {
+                        const { data: sessionData } = await supabase.auth.getSession();
+                        const uid = sessionData?.session?.user?.id || "anonymous";
+                        
+                        const uuid = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
+                        const extension = file.name.split('.').pop() || 'png';
+                        const filePath = `${uid}/companions/${myCompanionId}/${uuid}.${extension}`;
+                        
+                        const { error } = await supabase.storage
+                          .from("app-files")
+                          .upload(filePath, file, { cacheControl: "3600", upsert: true });
+                          
+                        if (error) {
+                          setFormError("Failed to upload image: " + error.message);
+                          setIsUploading(false);
+                          return;
                         }
-                      };
-                      reader.readAsDataURL(file);
+                        
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          if (typeof reader.result === "string") {
+                            setAvatarPreview(reader.result);
+                            setFormAvatar(filePath);
+                            setPresetIdx(-2);
+                            setIsUploading(false);
+                          }
+                        };
+                        reader.readAsDataURL(file);
+                      } catch (err: any) {
+                        setFormError("Upload error: " + (err.message || err));
+                        setIsUploading(false);
+                      }
                     }
                   }}
                 />
@@ -662,9 +694,10 @@ export default function CompanionWorkspace({
               <input
                 type="url"
                 placeholder="e.g. https://images.unsplash.com/photo-..."
-                value={presetIdx >= 0 ? "" : formAvatar}
+                value={presetIdx >= 0 ? "" : (formAvatar.includes("/") && !formAvatar.startsWith("http") ? "" : formAvatar)}
                 onChange={(e) => {
                   setFormAvatar(e.target.value);
+                  setAvatarPreview("");
                   setPresetIdx(-1);
                 }}
                 className="w-full bg-white border border-[#E5E1D8] text-gray-800 rounded-xl p-2.5 text-xs focus:outline-none focus:border-[#D4AF37]"
@@ -675,7 +708,7 @@ export default function CompanionWorkspace({
           {formAvatar && (
             <div className="flex items-center gap-3 bg-white p-2.5 rounded-xl border border-dashed border-[#E5E1D8] w-fit mt-1 shadow-sm">
               <img
-                src={formAvatar}
+                src={avatarPreview || formAvatar}
                 alt="Form Preview"
                 className="w-10 h-10 rounded-full object-cover border border-[#E5E1D8]"
                 onError={(e) => {
@@ -685,7 +718,7 @@ export default function CompanionWorkspace({
               <div>
                 <p className="text-[10px] font-bold text-[#1A1A1A]">Photo Uploaded / Selected</p>
                 <p className="text-[9px] text-gray-400 font-mono truncate max-w-[240px]">
-                  {formAvatar.startsWith("data:") ? "Direct Uploaded Image (Base64)" : formAvatar}
+                  {avatarPreview ? "Direct Uploaded Image (Base64)" : (formAvatar.includes("/") && !formAvatar.startsWith("http") ? "Storage path: " + formAvatar : formAvatar)}
                 </p>
               </div>
             </div>

@@ -205,10 +205,30 @@ export default function App() {
         .select("*")
         .order("created_at", { ascending: true });
 
+      let resolvedCompanions: Companion[] = [];
       if (!compError && dbCompanions && dbCompanions.length > 0) {
-        setCompanions(dbCompanions.map(mapCompanionFromDB));
+        resolvedCompanions = await Promise.all(
+          dbCompanions.map(async (c) => {
+            const mapped = mapCompanionFromDB(c);
+            if (mapped.avatar && !mapped.avatar.startsWith("http://") && !mapped.avatar.startsWith("https://") && !mapped.avatar.startsWith("data:")) {
+              try {
+                const { data: signedData, error: signedError } = await supabase.storage
+                  .from("app-files")
+                  .createSignedUrl(mapped.avatar, 3600);
+                if (!signedError && signedData) {
+                  mapped.avatar = signedData.signedUrl;
+                }
+              } catch (err) {
+                console.error("Error signing url for", mapped.id, err);
+              }
+            }
+            return mapped;
+          })
+        );
+        setCompanions(resolvedCompanions);
       } else {
         const localComps = getStoredCompanions();
+        resolvedCompanions = localComps;
         setCompanions(localComps);
 
         // Seed companions table if empty and user is logged in
@@ -245,7 +265,15 @@ export default function App() {
         }
         const { data: dbBookings, error: bookError } = await bookingsQuery;
         if (!bookError && dbBookings) {
-          setBookings(dbBookings.map(mapBookingFromDB));
+          const mappedBookings = dbBookings.map(b => {
+            const booking = mapBookingFromDB(b);
+            const comp = resolvedCompanions.find(c => c.id === booking.companionId);
+            if (comp) {
+              booking.companionAvatar = comp.avatar;
+            }
+            return booking;
+          });
+          setBookings(mappedBookings);
         } else {
           setBookings(getStoredBookings());
         }
@@ -628,6 +656,27 @@ export default function App() {
       saveStoredCompanions(updatedCompanions);
 
       try {
+        // Fetch original storage path first
+        const { data: currentComp } = await supabase
+          .from("companions")
+          .select("avatar")
+          .eq("id", id)
+          .maybeSingle();
+
+        if (currentComp && currentComp.avatar) {
+          const path = currentComp.avatar;
+          if (!path.startsWith("http://") && !path.startsWith("https://") && !path.startsWith("data:")) {
+            const { error: storageError } = await supabase.storage
+              .from("app-files")
+              .remove([path]);
+            if (storageError) {
+              console.error("Failed to delete companion avatar from Storage:", path, storageError);
+            } else {
+              console.log("Deleted companion avatar from Storage:", path);
+            }
+          }
+        }
+
         await supabase.from("companions").delete().eq("id", id);
       } catch (err) {
         console.error("Failed to remove companion from Supabase database:", err);
@@ -747,6 +796,27 @@ export default function App() {
                     setCompanions(updated);
                     saveStoredCompanions(updated);
                     try {
+                      // Fetch original storage path first
+                      const { data: currentComp } = await supabase
+                        .from("companions")
+                        .select("avatar")
+                        .eq("id", companionId)
+                        .maybeSingle();
+
+                      if (currentComp && currentComp.avatar) {
+                        const path = currentComp.avatar;
+                        if (!path.startsWith("http://") && !path.startsWith("https://") && !path.startsWith("data:")) {
+                          const { error: storageError } = await supabase.storage
+                            .from("app-files")
+                            .remove([path]);
+                          if (storageError) {
+                            console.error("Failed to delete companion avatar from Storage:", path, storageError);
+                          } else {
+                            console.log("Deleted companion avatar from Storage:", path);
+                          }
+                        }
+                      }
+
                       await supabase.from("companions").delete().eq("id", companionId);
                     } catch (err) {
                       console.error("Failed to delete companion from database:", err);

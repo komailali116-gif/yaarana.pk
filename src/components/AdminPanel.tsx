@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { Companion, CompanionStatus, CompanionGender, Booking, PAKISTAN_CITIES, PakistanCity } from "../types";
 import { SERVICES } from "../data/services";
 import { Shield, Users, Check, X, ToggleLeft, ToggleRight, Sparkles, Plus, Trash2, ShieldAlert, Star, ListFilter, Upload } from "lucide-react";
+// @ts-ignore
+import { supabase } from "../supabaseClient";
 
 const PRESET_AVATARS = [
   { url: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=400", gender: "Female", label: "Friendly Sana" },
@@ -43,6 +45,10 @@ export default function AdminPanel({
   const [newInterests, setNewInterests] = useState("Reading, Movies, Coffee");
   const [newServices, setNewServices] = useState<string[]>(["dining", "call", "study"]);
   const [newAvatarUrl, setNewAvatarUrl] = useState("");
+  const [avatarPreview, setAvatarPreview] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const [companionId, setCompanionId] = useState(() => "comp_" + Date.now());
   const [selectedPresetIdx, setSelectedPresetIdx] = useState(-1);
   const [newFeatured, setNewFeatured] = useState(false);
   const [newTagline, setNewTagline] = useState("");
@@ -63,7 +69,7 @@ export default function AdminPanel({
       return;
     }
 
-    const randomID = "comp_" + Date.now();
+    const randomID = companionId;
     const parsedLanguages = newLanguages.split(",").map(l => l.trim()).filter(Boolean);
     const parsedInterests = newInterests.split(",").map(i => i.trim()).filter(Boolean);
 
@@ -103,6 +109,8 @@ export default function AdminPanel({
     setNewInterests("Reading, Movies, Coffee");
     setNewServices(["dining", "call", "study"]);
     setNewAvatarUrl("");
+    setAvatarPreview("");
+    setCompanionId("comp_" + Date.now());
     setSelectedPresetIdx(-1);
     setNewFeatured(false);
     setNewTagline("");
@@ -497,27 +505,58 @@ export default function AdminPanel({
                 <div>
                   <span className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Option 2: Direct File Upload</span>
                   <label className="flex items-center justify-center gap-2 p-2 border border-dashed border-[#E5E1D8] hover:border-[#D4AF37] rounded-xl bg-white cursor-pointer transition-all hover:bg-gray-50 text-xs text-gray-600 font-semibold">
-                    <Upload className="w-4 h-4 text-[#D4AF37]" />
-                    <span>Upload Image File</span>
+                    <Upload className={`w-4 h-4 text-[#D4AF37] ${isUploading ? "animate-bounce" : ""}`} />
+                    <span>{isUploading ? "Uploading..." : "Upload Image File"}</span>
                     <input
                       type="file"
                       accept="image/*"
                       className="hidden"
-                      onChange={(e) => {
+                      disabled={isUploading}
+                      onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (file) {
-                          const reader = new FileReader();
-                          reader.onloadend = () => {
-                            if (typeof reader.result === "string") {
-                              setNewAvatarUrl(reader.result);
-                              setSelectedPresetIdx(-2); // custom upload marker
+                          setIsUploading(true);
+                          setUploadError("");
+                          
+                          try {
+                            const { data: sessionData } = await supabase.auth.getSession();
+                            const uid = sessionData?.session?.user?.id || "anonymous";
+                            
+                            const uuid = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
+                            const extension = file.name.split('.').pop() || 'png';
+                            const filePath = `${uid}/companions/${companionId}/${uuid}.${extension}`;
+                            
+                            const { error } = await supabase.storage
+                              .from("app-files")
+                              .upload(filePath, file, { cacheControl: "3600", upsert: true });
+                              
+                            if (error) {
+                              setUploadError("Failed to upload image: " + error.message);
+                              setIsUploading(false);
+                              return;
                             }
-                          };
-                          reader.readAsDataURL(file);
+                            
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              if (typeof reader.result === "string") {
+                                setAvatarPreview(reader.result);
+                                setNewAvatarUrl(filePath);
+                                setSelectedPresetIdx(-2);
+                                setIsUploading(false);
+                              }
+                            };
+                            reader.readAsDataURL(file);
+                          } catch (err: any) {
+                            setUploadError("Upload error: " + (err.message || err));
+                            setIsUploading(false);
+                          }
                         }
                       }}
                     />
                   </label>
+                  {uploadError && (
+                    <p className="text-red-500 text-[10px] mt-1 font-semibold">{uploadError}</p>
+                  )}
                 </div>
 
                 <div>
@@ -525,9 +564,10 @@ export default function AdminPanel({
                   <input
                     type="url"
                     placeholder="e.g. https://images.unsplash.com/photo-..."
-                    value={selectedPresetIdx >= 0 ? "" : newAvatarUrl}
+                    value={selectedPresetIdx >= 0 ? "" : (newAvatarUrl.includes("/") && !newAvatarUrl.startsWith("http") ? "" : newAvatarUrl)}
                     onChange={(e) => {
                       setNewAvatarUrl(e.target.value);
+                      setAvatarPreview("");
                       setSelectedPresetIdx(-1); // custom URL
                     }}
                     className="w-full bg-white border border-[#E5E1D8] text-gray-800 rounded-xl p-2.5 text-xs focus:outline-none focus:border-[#D4AF37]"
@@ -539,7 +579,7 @@ export default function AdminPanel({
               {newAvatarUrl && (
                 <div className="flex items-center gap-3 bg-white p-2.5 rounded-xl border border-dashed border-[#E5E1D8] w-fit mt-1 shadow-sm">
                   <img
-                    src={newAvatarUrl}
+                    src={avatarPreview || newAvatarUrl}
                     alt="Preview"
                     className="w-10 h-10 rounded-full object-cover border border-[#E5E1D8]"
                     onError={(e) => {
@@ -549,7 +589,7 @@ export default function AdminPanel({
                   <div>
                     <p className="text-[10px] font-bold text-[#1A1A1A]">Photo Assigned Successfully</p>
                     <p className="text-[9px] text-gray-400 font-mono truncate max-w-[240px]">
-                      {newAvatarUrl.startsWith("data:") ? "Direct Uploaded Image (Base64)" : newAvatarUrl}
+                      {avatarPreview ? "Direct Uploaded Image (Base64)" : (newAvatarUrl.includes("/") && !newAvatarUrl.startsWith("http") ? "Storage path: " + newAvatarUrl : newAvatarUrl)}
                     </p>
                   </div>
                 </div>
