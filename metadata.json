@@ -1,0 +1,6 @@
+{
+  "name": "Yarana.pk",
+  "description": "A premier marketplace for companionship services in Pakistan. Rent companions for dining, movies, calls, day spend, travel, nights out, and study sessions with fixed pricing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
