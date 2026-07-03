@@ -3,6 +3,8 @@ import { motion } from "motion/react";
 import { Sparkles, Mail, Lock, LogIn, UserPlus, Info } from "lucide-react";
 import { UserProfile } from "../types";
 import { DEFAULT_USER, DEFAULT_ADMIN } from "../lib/storage";
+// @ts-ignore
+import { supabase } from "../supabaseClient";
 
 interface AuthPageProps {
   onLoginSuccess: (profile: UserProfile) => void;
@@ -18,31 +20,70 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
-    setTimeout(() => {
-      if (isLogin) {
-        if (!email || !password) {
-          setError("Please fill in all fields.");
+    if (isLogin) {
+      if (!email || !password) {
+        setError("Please fill in all fields.");
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const { data, error: sbError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (sbError) {
+          setError(sbError.message);
           setLoading(false);
           return;
         }
 
-        if (email.toLowerCase() === "admin@yarana.pk") {
-          onLoginSuccess(DEFAULT_ADMIN);
-        } else {
-          onLoginSuccess({
-            ...DEFAULT_USER,
-            email: email,
-            name: email.split("@")[0].split(".").map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(" ") || "Yarana Member",
-          });
-        }
-      } else {
-        if (!name || !email || !password || !phone) {
-          setError("Please fill in all fields.");
+        const userObj = data.user;
+        const metadata = userObj?.user_metadata || {};
+        const isAdmin = email.toLowerCase() === "admin@yarana.pk";
+
+        onLoginSuccess({
+          name: metadata.name || email.split("@")[0].split(".").map((s: string) => s.charAt(0).toUpperCase() + s.slice(1)).join(" ") || "Yarana Member",
+          email: email,
+          phone: metadata.phone || "0300-1234567",
+          city: metadata.city || "Lahore",
+          avatar: metadata.avatar || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150`,
+          walletBalance: 15000,
+          isAdmin: isAdmin,
+        });
+      } catch (err: any) {
+        setError(err.message || "An unexpected error occurred during sign in.");
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      if (!name || !email || !password || !phone) {
+        setError("Please fill in all fields.");
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const { data, error: sbError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              name,
+              phone,
+              city,
+            },
+          },
+        });
+
+        if (sbError) {
+          setError(sbError.message);
           setLoading(false);
           return;
         }
@@ -51,14 +92,17 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
           name: name,
           email: email,
           phone: phone,
-          city: city,
+          city: city as any,
           avatar: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150`,
-          walletBalance: 15000, // PKR signup bonus
-          isAdmin: false
+          walletBalance: 15000,
+          isAdmin: false,
         });
+      } catch (err: any) {
+        setError(err.message || "An unexpected error occurred during registration.");
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
-    }, 1000);
+    }
   };
 
   const handleGoogleSignIn = () => {
