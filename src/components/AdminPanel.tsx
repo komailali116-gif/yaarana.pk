@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { motion } from "motion/react";
-import { Companion, CompanionStatus, CompanionGender, Booking, PAKISTAN_CITIES, PakistanCity } from "../types";
+import { Companion, CompanionStatus, CompanionGender, Booking, PAKISTAN_CITIES, PakistanCity, PricingTier } from "../types";
 import { SERVICES } from "../data/services";
-import { Shield, Users, Check, X, ToggleLeft, ToggleRight, Sparkles, Plus, Trash2, ShieldAlert, Star, ListFilter, Upload } from "lucide-react";
+import { Shield, Users, Check, X, ToggleLeft, ToggleRight, Sparkles, Plus, Trash2, ShieldAlert, Star, ListFilter, Upload, Award } from "lucide-react";
 // @ts-ignore
 import { supabase } from "../supabaseClient";
 import { countUploadedPics } from "../lib/limits";
@@ -21,11 +21,12 @@ const PRESET_AVATARS = [
 interface AdminPanelProps {
   companions: Companion[];
   bookings: Booking[];
-  onApproveCompanion: (id: string) => void;
+  onApproveCompanion: (id: string, tier?: PricingTier) => void;
   onRejectCompanion: (id: string) => void;
   onRemoveCompanion: (id: string) => void;
   onToggleOnline: (id: string) => void;
   onAddNewCompanion: (newComp: Companion) => void;
+  onUpdateCompanionTier?: (id: string, tier: PricingTier) => void;
 }
 
 export default function AdminPanel({
@@ -35,7 +36,8 @@ export default function AdminPanel({
   onRejectCompanion,
   onRemoveCompanion,
   onToggleOnline,
-  onAddNewCompanion
+  onAddNewCompanion,
+  onUpdateCompanionTier
 }: AdminPanelProps) {
   const [activeTab, setActiveTab] = useState<"listings" | "pending" | "add_new" | "bookings_log">("listings");
   const [newCompanionName, setNewCompanionName] = useState("");
@@ -56,6 +58,7 @@ export default function AdminPanel({
   const [newTagline, setNewTagline] = useState("");
   const [formSuccess, setFormSuccess] = useState("");
   const [showLimitModal, setShowLimitModal] = useState(false);
+  const [pendingTiers, setPendingTiers] = useState<Record<string, "Silver" | "Platinum" | "Gold">>({});
 
   const pendingCompanions = companions.filter(c => c.status === CompanionStatus.PENDING);
   const approvedCompanions = companions.filter(c => c.status === CompanionStatus.APPROVED);
@@ -226,7 +229,7 @@ export default function AdminPanel({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {approvedCompanions.map(comp => (
-                <div key={comp.id} className="p-4 rounded-2xl bg-[#F3F0E9]/20 border border-[#E5E1D8]/60 flex items-center justify-between gap-4">
+                <div key={comp.id} className="p-4 rounded-2xl bg-[#F3F0E9]/20 border border-[#E5E1D8]/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
                     <img
                       src={comp.avatar}
@@ -235,7 +238,10 @@ export default function AdminPanel({
                       className="w-12 h-12 rounded-full object-cover border border-[#E5E1D8]"
                     />
                     <div className="text-left">
-                      <p className="text-xs font-bold text-[#1A1A1A] leading-tight">{comp.name} <span className="text-gray-400 font-mono">({comp.age})</span></p>
+                      <p className="text-xs font-bold text-[#1A1A1A] leading-tight flex items-center gap-1.5 flex-wrap">
+                        <span>{comp.name}</span>
+                        <span className="text-gray-400 font-mono text-[10px]">({comp.age})</span>
+                      </p>
                       <p className="text-[10px] text-gray-400 font-mono mt-0.5">{comp.city} &bull; {comp.gender}</p>
                       
                       <div className="flex items-center gap-1 mt-1 text-[10px] text-[#D4AF37] font-bold">
@@ -243,33 +249,70 @@ export default function AdminPanel({
                         <span>{comp.rating > 0 ? comp.rating.toFixed(1) : "NEW"}</span>
                         <span className="text-gray-400">({comp.reviewsCount} reviews)</span>
                       </div>
+
+                      {/* Tier Label badge */}
+                      <div className="mt-1.5 flex items-center gap-1">
+                        <span className="text-[9px] text-gray-400 uppercase tracking-wider font-bold">Category:</span>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${
+                          comp.pricingTier === "Gold"
+                            ? "bg-amber-100 text-amber-800 border border-amber-200"
+                            : comp.pricingTier === "Platinum"
+                            ? "bg-indigo-100 text-indigo-800 border border-indigo-200"
+                            : "bg-slate-100 text-slate-700 border border-slate-250"
+                        }`}>
+                          {comp.pricingTier || "Silver"}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Actions toggle & remove */}
-                  <div className="flex items-center gap-3">
-                    {/* Toggle availability */}
-                    <button
-                      onClick={() => onToggleOnline(comp.id)}
-                      className="p-1 transition-all cursor-pointer"
-                      title="Toggle Host Online Status"
-                    >
-                      {comp.isOnline ? (
-                        <ToggleRight className="w-8 h-8 text-green-500" />
-                      ) : (
-                        <ToggleLeft className="w-8 h-8 text-gray-300" />
-                      )}
-                    </button>
+                  {/* Actions tier selection, toggle online, remove */}
+                  <div className="flex flex-wrap items-center gap-2.5 justify-between sm:justify-end border-t sm:border-0 pt-2 sm:pt-0 border-[#E5E1D8]/30">
+                    <div className="flex items-center gap-1">
+                      {(["Silver", "Platinum", "Gold"] as const).map(tier => (
+                        <button
+                          key={tier}
+                          onClick={() => onUpdateCompanionTier && onUpdateCompanionTier(comp.id, tier)}
+                          className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-all cursor-pointer ${
+                            (comp.pricingTier || "Silver") === tier
+                              ? tier === "Gold"
+                                ? "bg-amber-500 border-amber-600 text-white shadow-sm"
+                                : tier === "Platinum"
+                                ? "bg-indigo-600 border-indigo-750 text-white shadow-sm"
+                                : "bg-slate-700 border-slate-800 text-white shadow-sm"
+                              : "bg-white hover:bg-gray-50 text-gray-500 border-gray-200"
+                          }`}
+                          id={`btn-tier-${comp.id}-${tier}`}
+                        >
+                          {tier}
+                        </button>
+                      ))}
+                    </div>
 
-                    {/* Delete account */}
-                    <button
-                      onClick={() => onRemoveCompanion(comp.id)}
-                      className="p-2 bg-red-50 hover:bg-red-100 border border-red-100 text-red-600 rounded-xl cursor-pointer transition-all"
-                      title="Dissolve Companion Account"
-                      id={`admin-btn-delete-${comp.id}`}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      {/* Toggle availability */}
+                      <button
+                        onClick={() => onToggleOnline(comp.id)}
+                        className="p-1 transition-all cursor-pointer"
+                        title="Toggle Host Online Status"
+                      >
+                        {comp.isOnline ? (
+                          <ToggleRight className="w-7 h-7 text-green-500" />
+                        ) : (
+                          <ToggleLeft className="w-7 h-7 text-gray-300" />
+                        )}
+                      </button>
+
+                      {/* Delete account */}
+                      <button
+                        onClick={() => onRemoveCompanion(comp.id)}
+                        className="p-1.5 bg-red-50 hover:bg-red-100 border border-red-100 text-red-600 rounded-lg cursor-pointer transition-all"
+                        title="Dissolve Companion Account"
+                        id={`admin-btn-delete-${comp.id}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -339,24 +382,49 @@ export default function AdminPanel({
                     </div>
                   </div>
 
-                  {/* Accept / Reject actions */}
-                  <div className="flex items-center gap-2 border-t md:border-t-0 pt-3 md:pt-0 border-[#E5E1D8]/60 justify-end">
-                    <button
-                      onClick={() => onRejectCompanion(comp.id)}
-                      className="px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 rounded-xl text-xs font-bold uppercase transition-all cursor-pointer flex items-center gap-1"
-                      id={`admin-reject-btn-${comp.id}`}
-                    >
-                      <X className="w-3.5 h-3.5" />
-                      Reject
-                    </button>
-                    <button
-                      onClick={() => onApproveCompanion(comp.id)}
-                      className="px-4 py-2 bg-[#1A1C20] hover:bg-[#D4AF37] text-white hover:text-black rounded-xl text-xs font-bold uppercase transition-all cursor-pointer flex items-center gap-1 shadow-sm"
-                      id={`admin-approve-btn-${comp.id}`}
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                      Approve Host
-                    </button>
+                  {/* Select Pricing Tier & Accept/Reject actions */}
+                  <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3 border-t md:border-t-0 pt-3 md:pt-0 border-[#E5E1D8]/60 justify-end w-full md:w-auto">
+                    {/* Tier selector for approval */}
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] text-gray-400 font-bold mr-1 uppercase">Assign Category:</span>
+                      {(["Silver", "Platinum", "Gold"] as const).map(tier => (
+                        <button
+                          key={tier}
+                          type="button"
+                          onClick={() => setPendingTiers(prev => ({ ...prev, [comp.id]: tier }))}
+                          className={`px-2.5 py-1 rounded text-[10px] font-bold border transition-all cursor-pointer ${
+                            (pendingTiers[comp.id] || "Silver") === tier
+                              ? tier === "Gold"
+                                ? "bg-amber-500 border-amber-600 text-white shadow-sm"
+                                : tier === "Platinum"
+                                ? "bg-indigo-600 border-indigo-700 text-white shadow-sm"
+                                : "bg-slate-700 border-slate-800 text-white shadow-sm"
+                              : "bg-white hover:bg-gray-50 text-gray-500 border-gray-200"
+                          }`}
+                        >
+                          {tier}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => onRejectCompanion(comp.id)}
+                        className="px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 rounded-xl text-xs font-bold uppercase transition-all cursor-pointer flex items-center gap-1"
+                        id={`admin-reject-btn-${comp.id}`}
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        Reject
+                      </button>
+                      <button
+                        onClick={() => onApproveCompanion(comp.id, pendingTiers[comp.id] || "Silver")}
+                        className="px-4 py-2 bg-[#1A1C20] hover:bg-[#D4AF37] text-white hover:text-black rounded-xl text-xs font-bold uppercase transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+                        id={`admin-approve-btn-${comp.id}`}
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        Approve Host
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}

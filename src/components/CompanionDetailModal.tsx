@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Companion, Service, Review, Booking } from "../types";
-import { SERVICES, calculatePrice } from "../data/services";
+import { SERVICES, calculatePrice, getTierMultiplier } from "../data/services";
 import { getStoredReviews } from "../lib/storage";
 import { X, Star, Calendar, Clock, Sparkles, MapPin, Check, BookOpen, AlertCircle, HeartHandshake, ShieldCheck, Utensils, Film, PhoneCall, Sun, Compass, Moon, ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
 
@@ -244,7 +244,7 @@ export default function CompanionDetailModal({
           return;
         }
 
-        const calculated = calculatePrice(activeService.id, duration);
+        const calculated = calculatePrice(activeService.id, duration, companion.pricingTier);
         onProceedToPayment({
           serviceId: activeService.id,
           serviceName: activeService.name,
@@ -273,7 +273,10 @@ export default function CompanionDetailModal({
     }
   };
 
-  const totalPrice = activeService ? calculatePrice(activeService.id, duration) : 0;
+  const totalPrice = activeService ? calculatePrice(activeService.id, duration, companion.pricingTier) : 0;
+  const mult = getTierMultiplier(companion.pricingTier);
+  const adjBasePrice = activeService ? Math.round(activeService.basePrice * mult) : 0;
+  const adjExtraHourPrice = activeService ? Math.round(activeService.extraHourPrice * mult) : 0;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-[#1A1C20]/40 backdrop-blur-md flex justify-center items-start p-4 sm:p-6 md:p-10" id="companion-modal-overlay">
@@ -493,7 +496,9 @@ export default function CompanionDetailModal({
                             </div>
                             <div className="text-left">
                               <p className="text-xs font-bold text-[#1A1A1A]">{s.name}</p>
-                              <p className="text-[10px] text-gray-400 leading-none mt-0.5">{s.basePrice.toLocaleString()} PKR for {s.baseHours} {s.id === "call" ? "minutes" : "hours"}</p>
+                              <p className="text-[10px] text-gray-400 leading-none mt-0.5">
+                                {Math.round(s.basePrice * getTierMultiplier(companion.pricingTier)).toLocaleString()} PKR for {s.baseHours} {s.id === "call" ? "minutes" : "hours"}
+                              </p>
                             </div>
                           </div>
                           <div className="flex items-center">
@@ -757,26 +762,36 @@ export default function CompanionDetailModal({
                 </div>
                 <div className="flex justify-between text-gray-400">
                   <span>Base Rate ({activeService.baseHours} {activeService.id === "call" ? "minutes" : "hours"}):</span>
-                  <span>{activeService.basePrice.toLocaleString()} PKR</span>
+                  <span>{adjBasePrice.toLocaleString()} PKR</span>
                 </div>
 
                 {/* Extra pricing line */}
                 {activeService.id === "call" ? (
                   duration > 60 && (
                     <div className="flex justify-between text-gray-400">
-                      <span>Extra minutes ({duration - 60} min &bull; {activeService.extraHourPrice} PKR/m):</span>
-                      <span>{((duration - 60) * activeService.extraHourPrice).toLocaleString()} PKR</span>
+                      <span>Extra minutes ({duration - 60} min &bull; {adjExtraHourPrice} PKR/m):</span>
+                      <span>{((duration - 60) * adjExtraHourPrice).toLocaleString()} PKR</span>
                     </div>
                   )
                 ) : (
                   duration > activeService.baseHours && (
                     <div className="flex justify-between text-gray-400">
                       <span>
-                        Extra hours ({duration - activeService.baseHours}h &bull; {activeService.extraHourPrice} PKR/h):
+                        Extra hours ({duration - activeService.baseHours}h &bull; {adjExtraHourPrice} PKR/h):
                       </span>
-                      <span>{(totalPrice - activeService.basePrice).toLocaleString()} PKR</span>
+                      <span>{(totalPrice - adjBasePrice).toLocaleString()} PKR</span>
                     </div>
                   )
+                )}
+
+                {/* Tier information banner if not base (Silver) */}
+                {companion.pricingTier && companion.pricingTier !== "Silver" && (
+                  <div className="mt-2 p-2 rounded-xl bg-orange-50 border border-orange-100 text-[10px] text-orange-800 flex items-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5 text-[#D4AF37] animate-pulse" />
+                    <span>
+                      Pricing calculated based on <strong>{companion.name}</strong>'s <strong>{companion.pricingTier} Category</strong> rate multiplier.
+                    </span>
+                  </div>
                 )}
 
                 <div className="h-px bg-[#E5E1D8]/60 my-2" />

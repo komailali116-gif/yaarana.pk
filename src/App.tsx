@@ -60,6 +60,16 @@ function mapProfileToDB(profile: UserProfile, userId: string): any {
 }
 
 function mapCompanionFromDB(c: any): Companion {
+  const rawTagline = c.tagline || "";
+  let tier: "Silver" | "Platinum" | "Gold" = "Silver";
+  let tagline = rawTagline;
+
+  const match = rawTagline.match(/^\[Tier:(Silver|Platinum|Gold)\](.*)$/);
+  if (match) {
+    tier = match[1] as "Silver" | "Platinum" | "Gold";
+    tagline = match[2];
+  }
+
   return {
     id: c.id,
     name: c.name,
@@ -76,13 +86,17 @@ function mapCompanionFromDB(c: any): Companion {
     status: c.status,
     isOnline: Boolean(c.is_online),
     featured: Boolean(c.featured),
-    tagline: c.tagline || undefined,
+    tagline: tagline || undefined,
+    pricingTier: tier,
     cnic: c.cnic || undefined,
     mobile: c.mobile || undefined
   };
 }
 
 function mapCompanionToDB(c: Companion, userId?: string | null): any {
+  const tier = c.pricingTier || "Silver";
+  const packedTagline = `[Tier:${tier}]${c.tagline || ""}`;
+
   return {
     id: c.id,
     name: c.name,
@@ -99,7 +113,7 @@ function mapCompanionToDB(c: Companion, userId?: string | null): any {
     status: c.status,
     is_online: c.isOnline,
     featured: c.featured,
-    tagline: c.tagline || null,
+    tagline: packedTagline,
     cnic: c.cnic || null,
     mobile: c.mobile || null,
     user_id: userId || null
@@ -617,10 +631,10 @@ export default function App() {
   };
 
   // ADMIN ACTION: Approve pending host application
-  const handleApproveCompanion = async (id: string) => {
+  const handleApproveCompanion = async (id: string, tier?: "Silver" | "Platinum" | "Gold") => {
     const updatedCompanions = companions.map(c => {
       if (c.id === id) {
-        return { ...c, status: CompanionStatus.APPROVED };
+        return { ...c, status: CompanionStatus.APPROVED, pricingTier: tier || c.pricingTier || "Silver" };
       }
       return c;
     });
@@ -628,9 +642,33 @@ export default function App() {
     saveStoredCompanions(updatedCompanions);
 
     try {
-      await supabase.from("companions").update({ status: CompanionStatus.APPROVED }).eq("id", id);
+      const compObj = updatedCompanions.find(c => c.id === id);
+      if (compObj) {
+        await supabase.from("companions").update(mapCompanionToDB(compObj)).eq("id", id);
+      }
     } catch (err) {
       console.error("Failed to approve companion in Supabase database:", err);
+    }
+  };
+
+  // ADMIN ACTION: Update dynamic pricing tier for active host
+  const handleUpdateCompanionTier = async (id: string, tier: "Silver" | "Platinum" | "Gold") => {
+    const updatedCompanions = companions.map(c => {
+      if (c.id === id) {
+        return { ...c, pricingTier: tier };
+      }
+      return c;
+    });
+    setCompanions(updatedCompanions);
+    saveStoredCompanions(updatedCompanions);
+
+    try {
+      const compObj = updatedCompanions.find(c => c.id === id);
+      if (compObj) {
+        await supabase.from("companions").update(mapCompanionToDB(compObj)).eq("id", id);
+      }
+    } catch (err) {
+      console.error("Failed to update companion pricing tier in Supabase database:", err);
     }
   };
 
@@ -866,6 +904,7 @@ export default function App() {
                   onRemoveCompanion={handleRemoveCompanion}
                   onToggleOnline={handleToggleOnline}
                   onAddNewCompanion={handleAddNewCompanion}
+                  onUpdateCompanionTier={handleUpdateCompanionTier}
                 />
               )}
             </div>

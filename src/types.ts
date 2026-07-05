@@ -60,6 +60,8 @@ export enum CompanionGender {
   OTHER = "Other"
 }
 
+export type PricingTier = "Silver" | "Platinum" | "Gold";
+
 export enum CompanionStatus {
   PENDING = "Pending Approval",
   APPROVED = "Approved",
@@ -85,6 +87,7 @@ export interface Companion {
   tagline?: string;
   cnic?: string;
   mobile?: string;
+  pricingTier?: PricingTier;
 }
 
 export interface Service {

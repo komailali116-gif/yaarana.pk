@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Companion, CompanionGender, CompanionStatus, Service, PAKISTAN_CITIES } from "../types";
-import { Search, MapPin, Star, Sparkles, Filter, CheckCircle2, Moon, Utensils, Film, PhoneCall, Sun, Compass, BookOpen, ArrowLeft } from "lucide-react";
+import { Search, MapPin, Star, Sparkles, Filter, CheckCircle2, Moon, Utensils, Film, PhoneCall, Sun, Compass, BookOpen, ArrowLeft, Award } from "lucide-react";
 import { SERVICES } from "../data/services";
 
 interface BrowseCompanionsProps {
@@ -450,6 +450,17 @@ export default function BrowseCompanions({
                     <span className="inline-flex items-center gap-0.5 px-3 py-1 rounded-full bg-[#D4AF37] text-[9px] font-bold text-black uppercase tracking-widest shadow-sm">
                       <Sparkles className="w-2.5 h-2.5" />
                       Featured
+                    </span>
+                  )}
+
+                  {comp.pricingTier && comp.pricingTier !== "Silver" && (
+                    <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-widest shadow-md text-white ${
+                      comp.pricingTier === "Gold"
+                        ? "bg-gradient-to-r from-amber-500 to-amber-600 border border-amber-400"
+                        : "bg-gradient-to-r from-indigo-500 to-indigo-600 border border-indigo-400"
+                    }`}>
+                      <Award className="w-2.5 h-2.5" />
+                      {comp.pricingTier}
                     </span>
                   )}
                 </div>
