@@ -27,6 +27,7 @@ export default function BrowseCompanions({
   const filteredCompanions = approvedCompanions.filter(comp => {
     const matchesSearch =
       comp.name.toLowerCase().includes(search.toLowerCase()) ||
+      comp.city.toLowerCase().includes(search.toLowerCase()) ||
       comp.bio.toLowerCase().includes(search.toLowerCase()) ||
       comp.interests.some(interest => interest.toLowerCase().includes(search.toLowerCase()));
 
@@ -82,6 +83,33 @@ export default function BrowseCompanions({
         <p className="text-sm text-gray-500 max-w-2xl leading-relaxed">
           Premium social companions providing warmth, safety, and conversation. Filter instantly by clicking any bento block service below.
         </p>
+      </div>
+
+      {/* Top Search Bar */}
+      <div className="bg-[#1A1A1A] p-6 rounded-3xl shadow-md border border-[#D4AF37]/20 relative overflow-hidden" id="top-search-banner">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-[#D4AF37]/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
+        <div className="relative space-y-3 max-w-2xl">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-[#D4AF37] flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-ping"></span>
+            Live Companion Search
+          </h2>
+          <div className="relative">
+            <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-gray-400">
+              <Search className="w-5 h-5 text-[#D4AF37]" />
+            </span>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name, city, or interests (e.g., 'Lahore', 'swimming', 'Zara')...."
+              className="w-full bg-white/10 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white text-sm placeholder:text-gray-400 focus:outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] transition-all shadow-inner"
+              id="top-search-companions-input"
+            />
+          </div>
+          <p className="text-[11px] text-gray-400 font-light">
+            Matches companion names, Pakistani cities (31+ locations supported!), bio context, and specific hobbies or interests.
+          </p>
+        </div>
       </div>
 
       {/* INTERACTIVE BENTO GRID OF SERVICES & PRICING */}
