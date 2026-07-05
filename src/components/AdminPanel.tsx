@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { motion } from "motion/react";
 import { Companion, CompanionStatus, CompanionGender, Booking, PAKISTAN_CITIES, PakistanCity, PricingTier } from "../types";
 import { SERVICES } from "../data/services";
-import { Shield, Users, Check, X, ToggleLeft, ToggleRight, Sparkles, Plus, Trash2, ShieldAlert, Star, ListFilter, Upload, Award } from "lucide-react";
+import { Shield, Users, Check, X, ToggleLeft, ToggleRight, Sparkles, Plus, Trash2, ShieldAlert, Star, ListFilter, Upload, Award, Camera } from "lucide-react";
 // @ts-ignore
 import { supabase } from "../supabaseClient";
 import { countUploadedPics } from "../lib/limits";
@@ -61,6 +61,58 @@ export default function AdminPanel({
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [pendingTiers, setPendingTiers] = useState<Record<string, "Silver" | "Platinum" | "Gold">>({});
 
+  // Portfolio Photos states for Admin creation
+  const [newPhotos, setNewPhotos] = useState<string[]>([]);
+  const [isPhotoUploading, setIsPhotoUploading] = useState<number | null>(null);
+  const [photosError, setPhotosError] = useState("");
+
+  const handleAddPhotoUrl = (url: string, index: number) => {
+    if (!url.trim()) return;
+    const updated = [...newPhotos];
+    updated[index] = url.trim();
+    setNewPhotos(updated.filter(Boolean));
+  };
+
+  const handleRemovePhoto = (index: number) => {
+    const updated = [...newPhotos];
+    updated[index] = "";
+    setNewPhotos(updated.filter(Boolean));
+  };
+
+  const handlePortfolioPhotoUpload = async (file: File, slotIndex: number) => {
+    setPhotosError("");
+    setIsPhotoUploading(slotIndex);
+    try {
+      const uuid = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
+      const extension = file.name.split('.').pop() || 'png';
+      const filePath = `companions/${companionId}/portfolio_${slotIndex}_${uuid}.${extension}`;
+
+      const { error } = await supabase.storage
+        .from("app-files")
+        .upload(filePath, file, { cacheControl: "3600", upsert: true });
+
+      if (error) {
+        setPhotosError("Failed to upload portfolio photo: " + error.message);
+        setIsPhotoUploading(null);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === "string") {
+          const updated = [...newPhotos];
+          updated[slotIndex] = reader.result;
+          setNewPhotos(updated.filter(Boolean));
+          setIsPhotoUploading(null);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      setPhotosError("Upload error: " + (err.message || err));
+      setIsPhotoUploading(null);
+    }
+  };
+
   const pendingCompanions = companions.filter(c => c.status === CompanionStatus.PENDING);
   const approvedCompanions = companions.filter(c => c.status === CompanionStatus.APPROVED);
 
@@ -104,11 +156,12 @@ export default function AdminPanel({
       isOnline: true,
       featured: newFeatured,
       tagline: newTagline.trim() || undefined,
-      pricingTier: newPricingTier
+      pricingTier: newPricingTier,
+      photos: newPhotos.filter(Boolean).length > 0 ? newPhotos.filter(Boolean) : undefined
     };
 
     onAddNewCompanion(newComp);
-    setFormSuccess(`Companion profile for '${newCompanionName}' successfully provisioned and approved!`);
+    setFormSuccess(`Companion profile for '${newCompanionName}' successfully provisioned and approved with ${newPhotos.filter(Boolean).length} portfolio pictures!`);
 
     // Reset Form
     setNewCompanionName("");
@@ -123,6 +176,8 @@ export default function AdminPanel({
     setNewFeatured(false);
     setNewTagline("");
     setNewPricingTier("Silver");
+    setNewPhotos([]);
+    setPhotosError("");
   };
 
   const handleServiceToggle = (serviceId: string) => {
@@ -670,6 +725,113 @@ export default function AdminPanel({
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Portfolio Photos Portfolio */}
+            <div className="bg-[#F3F0E9]/10 border border-[#E5E1D8] p-5 rounded-2xl space-y-4 text-left">
+              <div className="flex justify-between items-center">
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                    <Camera className="w-4 h-4 text-[#D4AF37]" />
+                    <span>Portfolio Photos (2-3 Pics)</span>
+                  </label>
+                  <p className="text-[10px] text-gray-400">Add 2 to 3 beautiful additional pictures of this companion to display in their profile portfolio.</p>
+                </div>
+                <div className="text-[9px] font-bold text-[#D4AF37] uppercase bg-[#FFF4E5] border border-[#FFE0B2] px-2.5 py-1 rounded-full">
+                  {newPhotos.filter(Boolean).length} of 3 Slots Filled
+                </div>
+              </div>
+
+              {photosError && (
+                <div className="p-2.5 bg-red-50 border border-red-100 rounded-xl text-red-700 text-xs font-semibold flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 text-red-600 shrink-0" />
+                  <span>{photosError}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {[0, 1, 2].map((idx) => {
+                  const photo = newPhotos[idx];
+                  const isUploadingThisSlot = isPhotoUploading === idx;
+
+                  return (
+                    <div key={idx} className="relative aspect-square rounded-xl bg-white border border-dashed border-[#E5E1D8] overflow-hidden flex flex-col items-center justify-center p-3 hover:border-[#D4AF37]/50 transition-all">
+                      {photo ? (
+                        <>
+                          <img
+                            src={photo}
+                            alt={`Portfolio Preview ${idx + 1}`}
+                            className="w-full h-full object-cover rounded-lg"
+                            referrerPolicy="no-referrer"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePhoto(idx)}
+                            className="absolute top-1.5 right-1.5 p-1 rounded-full bg-red-50 text-red-600 hover:bg-red-100 border border-red-100 transition-all shadow-sm cursor-pointer"
+                            title="Remove photo"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      ) : (
+                        <div className="text-center space-y-2 w-full">
+                          <Camera className="w-5 h-5 text-gray-400 mx-auto" />
+                          <div className="text-[10px] text-gray-500 font-bold">Slot {idx + 1}</div>
+
+                          <div className="space-y-1.5">
+                            <label className="inline-flex items-center gap-1 bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-0.5 rounded-md text-[9px] font-bold cursor-pointer transition-all border border-[#E5E1D8]">
+                              <Upload className="w-2.5 h-2.5" />
+                              <span>{isUploadingThisSlot ? "..." : "Upload"}</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                disabled={isUploadingThisSlot}
+                                className="hidden"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) handlePortfolioPhotoUpload(file, idx);
+                                }}
+                              />
+                            </label>
+
+                            <div className="flex gap-1 items-center justify-center">
+                              <input
+                                type="url"
+                                placeholder="Or paste URL"
+                                id={`admin-portfolio-url-${idx}`}
+                                className="w-full text-[9px] bg-gray-50 border border-[#E5E1D8] text-gray-800 rounded p-0.5 focus:outline-none focus:border-[#D4AF37]"
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    const val = (e.target as HTMLInputElement).value;
+                                    if (val) {
+                                      handleAddPhotoUrl(val, idx);
+                                      (e.target as HTMLInputElement).value = "";
+                                    }
+                                  }
+                                }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const el = document.getElementById(`admin-portfolio-url-${idx}`) as HTMLInputElement;
+                                  if (el && el.value) {
+                                    handleAddPhotoUrl(el.value, idx);
+                                    el.value = "";
+                                  }
+                                }}
+                                className="p-1 bg-[#D4AF37] text-white rounded hover:bg-[#C5A028] transition-all cursor-pointer"
+                              >
+                                <Check className="w-2.5 h-2.5" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             <div>
