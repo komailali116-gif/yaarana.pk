@@ -48,7 +48,7 @@ export default function CompanionWorkspace({
   const myCompanion = companions.find(c => c.id === myCompanionId || c.cnic && c.mobile === user.phone);
 
   // Form states
-  const [formName, setFormName] = useState(user.name);
+  const [formName, setFormName] = useState("");
   const [formMobile, setFormMobile] = useState(user.phone);
   const [formCnic, setFormCnic] = useState("");
   const [formCity, setFormCity] = useState<PakistanCity>(user.city as PakistanCity || "Lahore");
@@ -658,11 +658,17 @@ export default function CompanionWorkspace({
                         const uid = sessionData?.session?.user?.id || "anonymous";
                         
                         // Limit Check: Count uploaded pics first
-                        const picCount = await countUploadedPics(uid);
-                        if (picCount >= 3) {
-                          setShowLimitModal(true);
-                          setIsUploading(false);
-                          return;
+                        const isHost = user.selectedRole === "companion" || !!myCompanion;
+                        const isAppAdmin = user.isAdmin;
+                        const hasNoLimits = isAppAdmin || isHost;
+                        
+                        if (!hasNoLimits) {
+                          const picCount = await countUploadedPics(uid);
+                          if (picCount >= 3) {
+                            setShowLimitModal(true);
+                            setIsUploading(false);
+                            return;
+                          }
                         }
                         
                         const uuid = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);

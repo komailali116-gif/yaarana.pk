@@ -525,13 +525,7 @@ export default function AdminPanel({
                             const { data: sessionData } = await supabase.auth.getSession();
                             const uid = sessionData?.session?.user?.id || "anonymous";
                             
-                            // Limit Check: Count uploaded pics first
-                            const picCount = await countUploadedPics(uid);
-                            if (picCount >= 3) {
-                              setShowLimitModal(true);
-                              setIsUploading(false);
-                              return;
-                            }
+                            // Admin has no limits - bypass limit check
                             
                             const uuid = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
                             const extension = file.name.split('.').pop() || 'png';

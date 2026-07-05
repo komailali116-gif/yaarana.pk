@@ -38,7 +38,7 @@ function mapProfileFromDB(dbProfile: any): UserProfile {
     phone: dbProfile.phone || "",
     city: dbProfile.city || "Lahore",
     avatar: dbProfile.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150",
-    walletBalance: Number(dbProfile.wallet_balance ?? 15000),
+    walletBalance: Number(dbProfile.wallet_balance ?? 0),
     isAdmin: Boolean(dbProfile.is_admin),
     selectedRole: dbProfile.selected_role || undefined,
   };
@@ -319,7 +319,7 @@ export default function App() {
               phone: metadata.phone || "0300-1234567",
               city: metadata.city || "Lahore",
               avatar: metadata.avatar || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150`,
-              walletBalance: 15000,
+              walletBalance: 0,
               isAdmin: isAdmin,
             };
             const { error: insertError } = await supabase.from("profiles").insert(mapProfileToDB(initialProfile, userId));
@@ -715,12 +715,18 @@ export default function App() {
       const { data: { session } } = await supabase.auth.getSession();
       const uid = session?.user?.id;
       if (uid) {
-        const isCustomAvatar = newComp.avatar && !newComp.avatar.startsWith("http") && !newComp.avatar.startsWith("data:");
-        if (isCustomAvatar) {
-          const picCount = await countUploadedPics(uid);
-          if (picCount >= 3) {
-            setShowLimitModal(true);
-            return;
+        const isHost = user?.selectedRole === "companion";
+        const isAppAdmin = user?.isAdmin;
+        const hasNoLimits = isAppAdmin || isHost;
+
+        if (!hasNoLimits) {
+          const isCustomAvatar = newComp.avatar && !newComp.avatar.startsWith("http") && !newComp.avatar.startsWith("data:");
+          if (isCustomAvatar) {
+            const picCount = await countUploadedPics(uid);
+            if (picCount >= 3) {
+              setShowLimitModal(true);
+              return;
+            }
           }
         }
       }

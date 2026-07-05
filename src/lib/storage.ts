@@ -46,12 +46,12 @@ export function saveStoredReviews(reviews: Review[]) {
 }
 
 export const DEFAULT_USER: UserProfile = {
-  name: "Komail Ali",
-  email: "komailali116@gmail.com",
-  phone: "0300-1234567",
+  name: "",
+  email: "",
+  phone: "",
   city: "Lahore",
   avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=200",
-  walletBalance: 25000, // PKR
+  walletBalance: 0, // PKR
   isAdmin: false
 };
 
