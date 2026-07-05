@@ -88,6 +88,8 @@ export interface Companion {
   cnic?: string;
   mobile?: string;
   pricingTier?: PricingTier;
+  userId?: string;
+  photos?: string[];
 }
 
 export interface Service {

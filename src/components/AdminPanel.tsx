@@ -56,6 +56,7 @@ export default function AdminPanel({
   const [selectedPresetIdx, setSelectedPresetIdx] = useState(-1);
   const [newFeatured, setNewFeatured] = useState(false);
   const [newTagline, setNewTagline] = useState("");
+  const [newPricingTier, setNewPricingTier] = useState<"Silver" | "Platinum" | "Gold">("Silver");
   const [formSuccess, setFormSuccess] = useState("");
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [pendingTiers, setPendingTiers] = useState<Record<string, "Silver" | "Platinum" | "Gold">>({});
@@ -102,7 +103,8 @@ export default function AdminPanel({
       status: CompanionStatus.APPROVED, // Admins directly approve their own creations!
       isOnline: true,
       featured: newFeatured,
-      tagline: newTagline.trim() || undefined
+      tagline: newTagline.trim() || undefined,
+      pricingTier: newPricingTier
     };
 
     onAddNewCompanion(newComp);
@@ -120,6 +122,7 @@ export default function AdminPanel({
     setSelectedPresetIdx(-1);
     setNewFeatured(false);
     setNewTagline("");
+    setNewPricingTier("Silver");
   };
 
   const handleServiceToggle = (serviceId: string) => {
@@ -688,7 +691,7 @@ export default function AdminPanel({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Personal Slogan / Catchy Tagline</label>
                 <input
@@ -698,6 +701,19 @@ export default function AdminPanel({
                   onChange={(e) => setNewTagline(e.target.value)}
                   className="w-full bg-[#F3F0E9]/30 border border-[#E5E1D8] text-gray-800 rounded-xl p-2.5 text-xs focus:outline-none focus:border-[#D4AF37]"
                 />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Pricing Category</label>
+                <select
+                  value={newPricingTier}
+                  onChange={(e) => setNewPricingTier(e.target.value as any)}
+                  className="w-full bg-[#F3F0E9]/30 border border-[#E5E1D8] text-gray-700 rounded-xl p-2.5 text-xs focus:outline-none focus:border-[#D4AF37] cursor-pointer"
+                >
+                  <option value="Silver">Silver (Base rates)</option>
+                  <option value="Platinum">Platinum (+30% Premium)</option>
+                  <option value="Gold">Gold (+70% higher than Platinum)</option>
+                </select>
               </div>
 
               <div className="flex flex-col justify-center">
@@ -711,7 +727,7 @@ export default function AdminPanel({
                   />
                   <span className="font-semibold flex items-center gap-1 text-[#1A1A1A]">
                     <Sparkles className="w-3.5 h-3.5 text-[#D4AF37]" />
-                    Featured Elite Host (Highlight in marketplace lists)
+                    Featured Elite Host
                   </span>
                 </label>
               </div>

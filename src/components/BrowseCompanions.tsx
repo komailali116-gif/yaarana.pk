@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Companion, CompanionGender, CompanionStatus, Service, PAKISTAN_CITIES } from "../types";
 import { Search, MapPin, Star, Sparkles, Filter, CheckCircle2, Moon, Utensils, Film, PhoneCall, Sun, Compass, BookOpen, ArrowLeft, Award } from "lucide-react";
-import { SERVICES } from "../data/services";
+import { SERVICES, getTierMultiplier } from "../data/services";
 
 interface BrowseCompanionsProps {
   companions: Companion[];
@@ -18,6 +18,7 @@ export default function BrowseCompanions({
   const [selectedCity, setSelectedCity] = useState<string>("All");
   const [selectedGender, setSelectedGender] = useState<string>("All");
   const [selectedService, setSelectedService] = useState<string>("All");
+  const [selectedTier, setSelectedTier] = useState<string>("All");
   const [onlyOnline, setOnlyOnline] = useState(false);
 
   // Filter approved companions
@@ -35,8 +36,9 @@ export default function BrowseCompanions({
     const matchesGender = selectedGender === "All" || comp.gender === selectedGender;
     const matchesService = selectedService === "All" || comp.services.includes(selectedService);
     const matchesOnline = !onlyOnline || comp.isOnline;
+    const matchesTier = selectedTier === "All" || (comp.pricingTier || "Silver") === selectedTier;
 
-    return matchesSearch && matchesCity && matchesGender && matchesService && matchesOnline;
+    return matchesSearch && matchesCity && matchesGender && matchesService && matchesOnline && matchesTier;
   });
 
   const getServiceIcon = (serviceId: string) => {
@@ -341,7 +343,7 @@ export default function BrowseCompanions({
         </div>
 
         {/* Filters Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-[#E5E1D8]/60">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 pt-4 border-t border-[#E5E1D8]/60">
           {/* City Selection */}
           <div className="space-y-1">
             <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider">Select City</label>
@@ -388,6 +390,22 @@ export default function BrowseCompanions({
               ))}
             </select>
           </div>
+
+          {/* Pricing Category Selection */}
+          <div className="space-y-1">
+            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider">Pricing Category</label>
+            <select
+              value={selectedTier}
+              onChange={(e) => setSelectedTier(e.target.value)}
+              className="w-full bg-white border border-[#E5E1D8] text-gray-700 rounded-xl p-2.5 text-xs focus:outline-none focus:border-[#D4AF37] cursor-pointer"
+              id="filter-tier-select"
+            >
+              <option value="All">All Categories</option>
+              <option value="Silver">Silver (Base rate)</option>
+              <option value="Platinum">Platinum (+30% Premium)</option>
+              <option value="Gold">Gold (+70% over Platinum)</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -396,13 +414,14 @@ export default function BrowseCompanions({
         <p className="text-xs text-gray-400 font-mono">
           Showing <span className="text-[#D4AF37] font-bold">{filteredCompanions.length}</span> verified hosts matching criteria
         </p>
-        {(selectedCity !== "All" || selectedGender !== "All" || selectedService !== "All" || search || onlyOnline) && (
+        {(selectedCity !== "All" || selectedGender !== "All" || selectedService !== "All" || selectedTier !== "All" || search || onlyOnline) && (
           <button
             onClick={() => {
               setSearch("");
               setSelectedCity("All");
               setSelectedGender("All");
               setSelectedService("All");
+              setSelectedTier("All");
               setOnlyOnline(false);
             }}
             className="text-xs text-[#D4AF37] font-semibold hover:underline cursor-pointer"
@@ -453,16 +472,16 @@ export default function BrowseCompanions({
                     </span>
                   )}
 
-                  {comp.pricingTier && comp.pricingTier !== "Silver" && (
-                    <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-widest shadow-md text-white ${
-                      comp.pricingTier === "Gold"
-                        ? "bg-gradient-to-r from-amber-500 to-amber-600 border border-amber-400"
-                        : "bg-gradient-to-r from-indigo-500 to-indigo-600 border border-indigo-400"
-                    }`}>
-                      <Award className="w-2.5 h-2.5" />
-                      {comp.pricingTier}
-                    </span>
-                  )}
+                  <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-widest shadow-md text-white ${
+                    comp.pricingTier === "Gold"
+                      ? "bg-gradient-to-r from-amber-500 to-amber-600 border border-amber-400"
+                      : comp.pricingTier === "Platinum"
+                      ? "bg-gradient-to-r from-indigo-500 to-indigo-600 border border-indigo-400"
+                      : "bg-gradient-to-r from-slate-500 to-slate-600 border border-slate-400"
+                  }`}>
+                    <Award className="w-2.5 h-2.5" />
+                    {comp.pricingTier || "Silver"} Category
+                  </span>
                 </div>
 
                 {/* Online Badge */}
@@ -519,19 +538,31 @@ export default function BrowseCompanions({
                 </div>
 
                 {/* Services Provided Row */}
-                <div className="pt-4 border-t border-[#E5E1D8]/50">
-                  <p className="text-[9px] text-gray-400 uppercase tracking-widest font-bold mb-2">Available Services:</p>
+                <div className="pt-4 border-t border-[#E5E1D8]/50 space-y-2">
+                  <div className="flex justify-between items-center text-[9px] text-gray-400 uppercase font-bold tracking-widest">
+                    <span>Available Services & Rates:</span>
+                    <span className="font-mono text-[8px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded border border-[#E5E1D8]">
+                      Rate: {comp.pricingTier === "Gold" ? "2.21x" : comp.pricingTier === "Platinum" ? "1.30x" : "1.00x"}
+                    </span>
+                  </div>
                   <div className="flex flex-wrap gap-1.5">
-                    {comp.services.map(sid => (
-                      <span
-                        key={sid}
-                        className="inline-flex items-center gap-1 text-[10px] bg-[#F3F0E9]/50 text-gray-700 border border-[#E5E1D8]/50 px-2 py-1 rounded-lg"
-                        title={getServiceName(sid)}
-                      >
-                        {getServiceIcon(sid)}
-                        <span className="font-semibold text-[9px] uppercase">{getServiceName(sid).split(" ")[0]}</span>
-                      </span>
-                    ))}
+                    {comp.services.map(sid => {
+                      const service = SERVICES.find(s => s.id === sid);
+                      if (!service) return null;
+                      const mult = getTierMultiplier(comp.pricingTier);
+                      const adjPrice = Math.round(service.basePrice * mult);
+                      return (
+                        <span
+                          key={sid}
+                          className="inline-flex items-center gap-1 text-[10px] bg-[#F3F0E9]/60 hover:bg-[#F3F0E9] text-gray-700 border border-[#E5E1D8]/60 px-2 py-1 rounded-lg transition-all"
+                          title={`${service.name}: ${adjPrice.toLocaleString()} PKR for ${service.baseHours} ${service.id === "call" ? "minutes" : "hours"}`}
+                        >
+                          {getServiceIcon(sid)}
+                          <span className="font-semibold text-[9px] uppercase text-gray-700">{service.name.split(" ")[0]}</span>
+                          <span className="text-orange-600 font-black font-mono ml-0.5 text-[9px]">{adjPrice.toLocaleString()} PKR</span>
+                        </span>
+                      );
+                    })}
                   </div>
                 </div>
 

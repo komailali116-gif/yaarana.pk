@@ -25,6 +25,7 @@ export default function CompanionDetailModal({
   onClose,
   onProceedToPayment
 }: CompanionDetailModalProps) {
+  const [zoomedPhoto, setZoomedPhoto] = useState<string | null>(null);
   const [selectedServiceId, setSelectedServiceId] = useState("");
   const [date, setDate] = useState(() => {
     const today = new Date();
@@ -305,9 +306,18 @@ export default function CompanionDetailModal({
               className="w-24 h-24 sm:w-28 sm:h-28 rounded-full object-cover border-4 border-[#D4AF37] shadow-sm"
             />
             <div className="space-y-1">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-2xl font-serif font-bold text-[#1A1A1A]">{companion.name}</h2>
                 <span className="text-gray-400 font-mono text-sm font-semibold">({companion.age})</span>
+                <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider shadow-xs text-white ${
+                  companion.pricingTier === "Gold"
+                    ? "bg-amber-500 border border-amber-400"
+                    : companion.pricingTier === "Platinum"
+                    ? "bg-indigo-500 border border-indigo-400"
+                    : "bg-slate-500 border border-slate-450"
+                }`}>
+                  {companion.pricingTier || "Silver"} Tier
+                </span>
               </div>
 
               {companion.tagline && (
@@ -363,6 +373,37 @@ export default function CompanionDetailModal({
               ))}
             </div>
           </div>
+
+          {/* Personal Photos Portfolio */}
+          {companion.photos && companion.photos.filter(Boolean).length > 0 && (
+            <div className="space-y-3 pt-2">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
+                <span>📸</span>
+                <span>Personal Photos Portfolio</span>
+              </h4>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5">
+                {companion.photos.filter(Boolean).map((photo, idx) => (
+                  <div 
+                    key={idx} 
+                    onClick={() => setZoomedPhoto(photo)}
+                    className="relative aspect-square rounded-2xl overflow-hidden border border-[#E5E1D8] shadow-xs group bg-[#F9F8F6] cursor-pointer hover:border-[#D4AF37] transition-all"
+                  >
+                    <img
+                      src={photo}
+                      alt={`${companion.name} portfolio photo ${idx + 1}`}
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute inset-0 bg-black/5 group-hover:bg-black/20 transition-all flex items-end justify-start p-2">
+                      <span className="text-[9px] font-bold text-white bg-black/50 px-2 py-0.5 rounded-lg backdrop-blur-xs font-sans">
+                        View Photo {idx + 1}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Mutual Respect Disclaimer banner */}
           <div className="p-4 rounded-2xl bg-[#FFF4E5] border border-[#FFE0B2] flex gap-3 text-xs text-orange-900">
@@ -838,6 +879,29 @@ export default function CompanionDetailModal({
         </div>
 
       </div>
+
+      {/* Lightbox Photo Zoom Portal */}
+      {zoomedPhoto && (
+        <div 
+          className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4 cursor-zoom-out"
+          onClick={() => setZoomedPhoto(null)}
+        >
+          <button 
+            type="button"
+            className="absolute top-4 right-4 p-2.5 rounded-full bg-white/10 text-white hover:bg-white/20 transition-all border border-white/10 cursor-pointer"
+            onClick={() => setZoomedPhoto(null)}
+          >
+            <X className="w-6 h-6" />
+          </button>
+          <img 
+            src={zoomedPhoto} 
+            alt="Zoomed Portfolio Pic" 
+            className="max-w-full max-h-[90vh] object-contain rounded-2xl shadow-2xl border border-white/10"
+            referrerPolicy="no-referrer"
+          />
+        </div>
+      )}
+
     </div>
   );
 }

@@ -3,7 +3,8 @@ import { motion } from "motion/react";
 import { 
   Sparkles, Check, X, ShieldAlert, Clock, User, Phone, 
   MapPin, Hash, Star, ToggleLeft, ToggleRight, DollarSign, 
-  BookOpen, Heart, Upload, AlertCircle, FileText, ArrowLeft
+  BookOpen, Heart, Upload, AlertCircle, FileText, ArrowLeft,
+  Camera, Trash2, Plus
 } from "lucide-react";
 import { Companion, CompanionStatus, CompanionGender, UserProfile, Booking, Review, PAKISTAN_CITIES, PakistanCity } from "../types";
 import { SERVICES } from "../data/services";
@@ -31,6 +32,7 @@ interface CompanionWorkspaceProps {
   onToggleOnline: (companionId: string) => void;
   onResubmitApplication: (companionId: string) => void;
   onGoBackToRoleSelection?: () => void;
+  onUpdateCompanionPhotos?: (companionId: string, photos: string[]) => void;
 }
 
 export default function CompanionWorkspace({
@@ -41,7 +43,8 @@ export default function CompanionWorkspace({
   onSubmitApplication,
   onToggleOnline,
   onResubmitApplication,
-  onGoBackToRoleSelection
+  onGoBackToRoleSelection,
+  onUpdateCompanionPhotos
 }: CompanionWorkspaceProps) {
   // Try to find if this user has already created a companion profile
   const myCompanionId = "comp_" + user.email.replace(/[@.]/g, "_");
@@ -67,6 +70,19 @@ export default function CompanionWorkspace({
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [showLimitModal, setShowLimitModal] = useState(false);
 
+  // Portfolio Photos states
+  const [formPhotos, setFormPhotos] = useState<string[]>(() => {
+    if (myCompanion && myCompanion.photos) {
+      return [...myCompanion.photos];
+    }
+    return [];
+  });
+  const [photoInputUrl, setPhotoInputUrl] = useState("");
+  const [photoInputIndex, setPhotoInputIndex] = useState<number | null>(null);
+  const [isPhotoUploading, setIsPhotoUploading] = useState<number | null>(null);
+  const [photosError, setPhotosError] = useState("");
+  const [savePhotosSuccess, setSavePhotosSuccess] = useState(false);
+
   // Filter stats for approved hosts
   const myBookings = myCompanion ? bookings.filter(b => b.companionId === myCompanion.id) : [];
   const myReviews = myCompanion ? reviews.filter(r => r.companionId === myCompanion.id) : [];
@@ -80,6 +96,61 @@ export default function CompanionWorkspace({
       setFormServices(formServices.filter(id => id !== serviceId));
     } else {
       setFormServices([...formServices, serviceId]);
+    }
+  };
+
+  const handleAddPhotoUrl = (url: string, index: number) => {
+    if (!url.trim()) return;
+    const updated = [...formPhotos];
+    updated[index] = url.trim();
+    setFormPhotos(updated.filter(Boolean));
+  };
+
+  const handleRemovePhoto = (index: number) => {
+    const updated = [...formPhotos];
+    updated[index] = "";
+    setFormPhotos(updated.filter(Boolean));
+  };
+
+  const handlePortfolioPhotoUpload = async (file: File, slotIndex: number) => {
+    setPhotosError("");
+    setIsPhotoUploading(slotIndex);
+    try {
+      const uuid = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
+      const extension = file.name.split('.').pop() || 'png';
+      const filePath = `companions/${myCompanionId}/portfolio_${slotIndex}_${uuid}.${extension}`;
+
+      const { error } = await supabase.storage
+        .from("app-files")
+        .upload(filePath, file, { cacheControl: "3600", upsert: true });
+
+      if (error) {
+        setPhotosError("Failed to upload portfolio photo: " + error.message);
+        setIsPhotoUploading(null);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === "string") {
+          const updated = [...formPhotos];
+          updated[slotIndex] = reader.result;
+          setFormPhotos(updated.filter(Boolean));
+          setIsPhotoUploading(null);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      setPhotosError("Upload error: " + (err.message || err));
+      setIsPhotoUploading(null);
+    }
+  };
+
+  const handleSavePortfolio = () => {
+    if (onUpdateCompanionPhotos && myCompanion) {
+      onUpdateCompanionPhotos(myCompanion.id, formPhotos.filter(Boolean));
+      setSavePhotosSuccess(true);
+      setTimeout(() => setSavePhotosSuccess(false), 3000);
     }
   };
 
@@ -123,7 +194,8 @@ export default function CompanionWorkspace({
       featured: false,
       tagline: formTagline.trim() || undefined,
       cnic: formCnic.trim(),
-      mobile: formMobile.trim()
+      mobile: formMobile.trim(),
+      photos: formPhotos.filter(Boolean)
     };
 
     onSubmitApplication(newCompanionProfile);
@@ -297,10 +369,22 @@ export default function CompanionWorkspace({
               alt={myCompanion.name}
               className="w-16 h-16 rounded-full object-cover border-2 border-[#D4AF37]"
             />
-            <div className="text-left space-y-1">
-              <span className="text-[9px] font-bold text-green-700 bg-green-50 px-2 py-0.5 rounded-full border border-green-100 uppercase tracking-wider">
-                ● Approved & Live Profile
-              </span>
+            <div className="text-left space-y-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[9px] font-bold text-green-700 bg-green-50 px-2 py-0.5 rounded-full border border-green-100 uppercase tracking-wider">
+                  ● Approved & Live Profile
+                </span>
+                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase border flex items-center gap-1 ${
+                  myCompanion.pricingTier === "Gold"
+                    ? "bg-amber-100 text-amber-800 border-amber-200"
+                    : myCompanion.pricingTier === "Platinum"
+                    ? "bg-indigo-100 text-indigo-850 border-indigo-200"
+                    : "bg-slate-100 text-slate-700 border-slate-200"
+                }`}>
+                  <span>💎</span>
+                  <span>{myCompanion.pricingTier || "Silver"} Category ({myCompanion.pricingTier === "Gold" ? "+70% higher than Platinum" : myCompanion.pricingTier === "Platinum" ? "+30% Premium" : "Base Rates"})</span>
+                </span>
+              </div>
               <h2 className="text-xl font-serif font-bold text-[#1A1A1A] leading-none">{myCompanion.name}</h2>
               <p className="text-xs text-gray-400 font-mono">{myCompanion.city} &bull; Verified Host Companion</p>
             </div>
@@ -409,6 +493,146 @@ export default function CompanionWorkspace({
                 ))}
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Personal Photos Portfolio */}
+        <div className="bg-white border border-[#E5E1D8] p-6 rounded-3xl shadow-sm space-y-5 text-left">
+          <div className="border-b border-[#E5E1D8]/60 pb-3 flex justify-between items-center flex-wrap gap-2">
+            <div>
+              <h3 className="text-base font-serif font-black text-[#1A1A1A] flex items-center gap-2">
+                <Camera className="w-5 h-5 text-[#D4AF37]" />
+                <span>My Portfolio Photos (2-3 Pics)</span>
+              </h3>
+              <p className="text-[11px] text-gray-400">Add 2 to 3 beautiful pictures of yourself to showcase your personality to potential clients.</p>
+            </div>
+            <div className="text-[10px] font-extrabold text-[#D4AF37] uppercase tracking-wider bg-[#FFF4E5] border border-[#FFE0B2] px-2.5 py-1 rounded-full">
+              {formPhotos.filter(Boolean).length} of 3 Slots Filled
+            </div>
+          </div>
+
+          {photosError && (
+            <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-red-700 text-xs font-semibold flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+              <span>{photosError}</span>
+            </div>
+          )}
+
+          {/* Photo Slots Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+            {[0, 1, 2].map((idx) => {
+              const photo = formPhotos[idx];
+              const isUploadingThisSlot = isPhotoUploading === idx;
+
+              return (
+                <div key={idx} className="relative group aspect-square rounded-2xl bg-[#F9F8F6] border-2 border-dashed border-[#E5E1D8] overflow-hidden flex flex-col items-center justify-center p-4 transition-all hover:border-[#D4AF37]/50">
+                  {photo ? (
+                    <>
+                      <img
+                        src={photo}
+                        alt={`Portfolio Photo ${idx + 1}`}
+                        className="w-full h-full object-cover rounded-xl"
+                        referrerPolicy="no-referrer"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRemovePhoto(idx)}
+                        className="absolute top-2 right-2 p-1.5 rounded-full bg-red-50 text-red-600 hover:bg-red-100 border border-red-100 transition-all shadow-sm opacity-90 hover:opacity-100 cursor-pointer"
+                        title="Remove photo"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                      <span className="absolute bottom-2 left-2 text-[10px] font-bold bg-black/60 text-white px-2 py-0.5 rounded-full backdrop-blur-xs">
+                        Photo {idx + 1}
+                      </span>
+                    </>
+                  ) : (
+                    <div className="text-center space-y-3 w-full">
+                      <div className="w-10 h-10 rounded-full bg-[#D4AF37]/10 text-[#D4AF37] flex items-center justify-center mx-auto">
+                        <Camera className="w-5 h-5" />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs font-bold text-gray-700">Slot {idx + 1}</p>
+                        <p className="text-[10px] text-gray-400">Upload or enter URL</p>
+                      </div>
+
+                      {/* URL input and upload button */}
+                      <div className="space-y-2 pt-1">
+                        <label className="inline-flex items-center gap-1 bg-[#1A1A1A] hover:bg-black text-white px-2.5 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-all shadow-sm">
+                          <Upload className="w-3 h-3" />
+                          <span>{isUploadingThisSlot ? "Uploading..." : "Upload File"}</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            disabled={isUploadingThisSlot}
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handlePortfolioPhotoUpload(file, idx);
+                            }}
+                          />
+                        </label>
+
+                        <div className="flex gap-1 items-center justify-center">
+                          <input
+                            type="url"
+                            placeholder="Or paste image URL"
+                            id={`portfolio-url-input-${idx}`}
+                            className="w-full text-[10px] bg-white border border-[#E5E1D8] text-gray-800 rounded-md p-1 focus:outline-none focus:border-[#D4AF37] font-sans"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                const val = (e.target as HTMLInputElement).value;
+                                if (val) {
+                                  handleAddPhotoUrl(val, idx);
+                                  (e.target as HTMLInputElement).value = "";
+                                }
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const el = document.getElementById(`portfolio-url-input-${idx}`) as HTMLInputElement;
+                              if (el && el.value) {
+                                handleAddPhotoUrl(el.value, idx);
+                                el.value = "";
+                              }
+                            }}
+                            className="p-1 bg-[#D4AF37] text-white rounded-md hover:bg-[#C5A028] transition-all cursor-pointer"
+                            title="Add URL"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex justify-end pt-2 border-t border-[#E5E1D8]/40">
+            <button
+              type="button"
+              onClick={handleSavePortfolio}
+              className={`px-5 py-2.5 rounded-xl text-xs font-bold uppercase transition-all shadow-sm flex items-center gap-2 cursor-pointer ${
+                savePhotosSuccess
+                  ? "bg-green-600 text-white"
+                  : "bg-[#1A1A1A] hover:bg-black text-white hover:shadow-md"
+              }`}
+            >
+              {savePhotosSuccess ? (
+                <>
+                  <Check className="w-4 h-4" />
+                  <span>Portfolio Photos Saved!</span>
+                </>
+              ) : (
+                <>
+                  <span>Save Portfolio Photos</span>
+                </>
+              )}
+            </button>
           </div>
         </div>
 
@@ -739,6 +963,101 @@ export default function CompanionWorkspace({
               </div>
             </div>
           )}
+        </div>
+
+        {/* Portfolio Photos (2-3 pics) */}
+        <div className="bg-[#F3F0E9]/10 border border-[#E5E1D8] p-5 rounded-2xl space-y-4">
+          <div>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-gray-700 flex items-center gap-1.5">
+              <Camera className="w-4 h-4 text-[#D4AF37]" />
+              <span>Add 2 to 3 Personal Photos of Yourself</span>
+            </h4>
+            <p className="text-[10px] text-gray-400 mt-0.5">Showcase your friendly face and personality to our community. Upload or add image URLs.</p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {[0, 1, 2].map((idx) => {
+              const photo = formPhotos[idx];
+              const isUploadingThisSlot = isPhotoUploading === idx;
+
+              return (
+                <div key={idx} className="relative aspect-square rounded-xl bg-white border border-dashed border-[#E5E1D8] overflow-hidden flex flex-col items-center justify-center p-3 hover:border-[#D4AF37]/50 transition-all">
+                  {photo ? (
+                    <>
+                      <img
+                        src={photo}
+                        alt={`Portfolio Photo Preview ${idx + 1}`}
+                        className="w-full h-full object-cover rounded-lg"
+                        referrerPolicy="no-referrer"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRemovePhoto(idx)}
+                        className="absolute top-1.5 right-1.5 p-1 rounded-full bg-red-50 text-red-600 hover:bg-red-100 border border-red-100 transition-all shadow-sm cursor-pointer"
+                        title="Remove photo"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  ) : (
+                    <div className="text-center space-y-2 w-full">
+                      <Camera className="w-5 h-5 text-gray-400 mx-auto" />
+                      <div className="text-[10px] text-gray-500 font-bold">Slot {idx + 1}</div>
+
+                      <div className="space-y-1.5">
+                        <label className="inline-flex items-center gap-1 bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-0.5 rounded-md text-[9px] font-bold cursor-pointer transition-all border border-[#E5E1D8]">
+                          <Upload className="w-2.5 h-2.5" />
+                          <span>{isUploadingThisSlot ? "..." : "Upload"}</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            disabled={isUploadingThisSlot}
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handlePortfolioPhotoUpload(file, idx);
+                            }}
+                          />
+                        </label>
+
+                        <div className="flex gap-1 items-center justify-center">
+                          <input
+                            type="url"
+                            placeholder="Or paste URL"
+                            id={`form-portfolio-url-${idx}`}
+                            className="w-full text-[9px] bg-gray-50 border border-[#E5E1D8] text-gray-800 rounded p-0.5 focus:outline-none focus:border-[#D4AF37]"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                const val = (e.target as HTMLInputElement).value;
+                                if (val) {
+                                  handleAddPhotoUrl(val, idx);
+                                  (e.target as HTMLInputElement).value = "";
+                                }
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const el = document.getElementById(`form-portfolio-url-${idx}`) as HTMLInputElement;
+                              if (el && el.value) {
+                                handleAddPhotoUrl(el.value, idx);
+                                el.value = "";
+                              }
+                            }}
+                            className="p-1 bg-[#D4AF37] text-white rounded hover:bg-[#C5A028] transition-all cursor-pointer"
+                          >
+                            <Check className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* Catchy Tagline */}

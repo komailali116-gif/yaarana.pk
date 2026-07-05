@@ -13,6 +13,7 @@ import AdminPanel from "./components/AdminPanel";
 import RoleSelectionPage from "./components/RoleSelectionPage";
 import CompanionWorkspace from "./components/CompanionWorkspace";
 import { Companion, Booking, Review, UserProfile, CompanionStatus } from "./types";
+import { INITIAL_COMPANIONS } from "./data/companions";
 // @ts-ignore
 import { supabase } from "./supabaseClient";
 import { countUploadedPics } from "./lib/limits";
@@ -63,12 +64,42 @@ function mapCompanionFromDB(c: any): Companion {
   const rawTagline = c.tagline || "";
   let tier: "Silver" | "Platinum" | "Gold" = "Silver";
   let tagline = rawTagline;
+  let photos: string[] = [];
 
-  const match = rawTagline.match(/^\[Tier:(Silver|Platinum|Gold)\](.*)$/);
-  if (match) {
-    tier = match[1] as "Silver" | "Platinum" | "Gold";
-    tagline = match[2];
+  const tierMatch = rawTagline.match(/^\[Tier:(Silver|Platinum|Gold)\]/);
+  if (tierMatch) {
+    tier = tierMatch[1] as "Silver" | "Platinum" | "Gold";
+  } else {
+    // If no explicit [Tier:...] prefix exists in the db, look up default seed tier
+    if (c.id === "comp_1" || c.id === "comp_4") {
+      tier = "Gold";
+    } else if (c.id === "comp_2" || c.id === "comp_5") {
+      tier = "Platinum";
+    }
   }
+
+  // Extract photos pattern if present
+  const photosMatch = rawTagline.match(/\[Photos:(\[[^\]]*\])\]/);
+  if (photosMatch) {
+    try {
+      photos = JSON.parse(photosMatch[1]);
+    } catch (e) {
+      console.error("Failed to parse packed photos:", e);
+    }
+  }
+
+  // If no photos, fall back to seed data if this is a default seed companion
+  if (photos.length === 0) {
+    const seed = INITIAL_COMPANIONS.find(sc => sc.id === c.id);
+    if (seed && seed.photos) {
+      photos = seed.photos;
+    }
+  }
+
+  // Clean the tagline
+  tagline = rawTagline
+    .replace(/^\[Tier:(Silver|Platinum|Gold)\]/, "")
+    .replace(/\[Photos:\[[^\]]*\]\]/, "");
 
   return {
     id: c.id,
@@ -89,13 +120,16 @@ function mapCompanionFromDB(c: any): Companion {
     tagline: tagline || undefined,
     pricingTier: tier,
     cnic: c.cnic || undefined,
-    mobile: c.mobile || undefined
+    mobile: c.mobile || undefined,
+    userId: c.user_id || undefined,
+    photos: photos.length > 0 ? photos : undefined
   };
 }
 
 function mapCompanionToDB(c: Companion, userId?: string | null): any {
   const tier = c.pricingTier || "Silver";
-  const packedTagline = `[Tier:${tier}]${c.tagline || ""}`;
+  const photosStr = c.photos && c.photos.length > 0 ? `[Photos:${JSON.stringify(c.photos)}]` : "";
+  const packedTagline = `[Tier:${tier}]${photosStr}${c.tagline || ""}`;
 
   return {
     id: c.id,
@@ -116,7 +150,7 @@ function mapCompanionToDB(c: Companion, userId?: string | null): any {
     tagline: packedTagline,
     cnic: c.cnic || null,
     mobile: c.mobile || null,
-    user_id: userId || null
+    user_id: userId !== undefined ? userId : (c.userId || null)
   };
 }
 
@@ -228,6 +262,13 @@ export default function App() {
         resolvedCompanions = await Promise.all(
           dbCompanions.map(async (c) => {
             const mapped = mapCompanionFromDB(c);
+
+            // Auto-assign pre-seeded companion tiers for any database matches defaulting to Silver
+            const matchedSeed = INITIAL_COMPANIONS.find(ic => ic.id === mapped.id || ic.name === mapped.name);
+            if (matchedSeed && mapped.pricingTier === "Silver" && matchedSeed.pricingTier && matchedSeed.pricingTier !== "Silver") {
+              mapped.pricingTier = matchedSeed.pricingTier;
+            }
+
             if (mapped.avatar && !mapped.avatar.startsWith("http://") && !mapped.avatar.startsWith("https://") && !mapped.avatar.startsWith("data:")) {
               try {
                 const { data: signedData, error: signedError } = await supabase.storage
@@ -672,6 +713,26 @@ export default function App() {
     }
   };
 
+  const handleUpdateCompanionPhotos = async (id: string, photos: string[]) => {
+    const updatedCompanions = companions.map(c => {
+      if (c.id === id) {
+        return { ...c, photos };
+      }
+      return c;
+    });
+    setCompanions(updatedCompanions);
+    saveStoredCompanions(updatedCompanions);
+
+    try {
+      const compObj = updatedCompanions.find(c => c.id === id);
+      if (compObj) {
+        await supabase.from("companions").update(mapCompanionToDB(compObj)).eq("id", id);
+      }
+    } catch (err) {
+      console.error("Failed to update companion photos in Supabase database:", err);
+    }
+  };
+
   // ADMIN ACTION: Reject pending host application
   const handleRejectCompanion = async (id: string) => {
     const updatedCompanions = companions.map(c => {
@@ -856,6 +917,7 @@ export default function App() {
                   reviews={reviews}
                   onSubmitApplication={handleAddNewCompanion}
                   onToggleOnline={handleToggleOnline}
+                  onUpdateCompanionPhotos={handleUpdateCompanionPhotos}
                   onResubmitApplication={async (companionId) => {
                     const updated = companions.filter(c => c.id !== companionId);
                     setCompanions(updated);

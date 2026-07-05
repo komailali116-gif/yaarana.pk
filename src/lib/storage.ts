@@ -12,7 +12,25 @@ export function getStoredCompanions(): Companion[] {
     localStorage.setItem(COMPANIONS_KEY, JSON.stringify(INITIAL_COMPANIONS));
     return INITIAL_COMPANIONS;
   }
-  return JSON.parse(stored);
+  try {
+    const list = JSON.parse(stored) as Companion[];
+    let upgraded = false;
+    const healed = list.map(c => {
+      const seed = INITIAL_COMPANIONS.find(sc => sc.id === c.id);
+      if (!c.pricingTier || (c.pricingTier === "Silver" && seed?.pricingTier && seed.pricingTier !== "Silver")) {
+        c.pricingTier = seed?.pricingTier || "Silver";
+        upgraded = true;
+      }
+      return c;
+    });
+    if (upgraded) {
+      localStorage.setItem(COMPANIONS_KEY, JSON.stringify(healed));
+    }
+    return healed;
+  } catch (e) {
+    localStorage.setItem(COMPANIONS_KEY, JSON.stringify(INITIAL_COMPANIONS));
+    return INITIAL_COMPANIONS;
+  }
 }
 
 export function saveStoredCompanions(companions: Companion[]) {
