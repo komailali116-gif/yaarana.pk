@@ -281,6 +281,26 @@ export default function App() {
                 console.error("Error signing url for", mapped.id, err);
               }
             }
+
+            if (mapped.photos && mapped.photos.length > 0) {
+              try {
+                mapped.photos = await Promise.all(
+                  mapped.photos.map(async (photo) => {
+                    if (photo && !photo.startsWith("http://") && !photo.startsWith("https://") && !photo.startsWith("data:")) {
+                      const { data: signedData, error: signedError } = await supabase.storage
+                        .from("app-files")
+                        .createSignedUrl(photo, 3600);
+                      if (!signedError && signedData) {
+                        return signedData.signedUrl;
+                      }
+                    }
+                    return photo;
+                  })
+                );
+              } catch (err) {
+                console.error("Error signing portfolio photos for", mapped.id, err);
+              }
+            }
             return mapped;
           })
         );

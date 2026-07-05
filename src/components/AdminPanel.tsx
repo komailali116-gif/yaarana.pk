@@ -62,7 +62,8 @@ export default function AdminPanel({
   const [pendingTiers, setPendingTiers] = useState<Record<string, "Silver" | "Platinum" | "Gold">>({});
 
   // Portfolio Photos states for Admin creation
-  const [newPhotos, setNewPhotos] = useState<string[]>([]);
+  const [newPhotos, setNewPhotos] = useState<string[]>(["", "", ""]);
+  const [newPhotoPreviews, setNewPhotoPreviews] = useState<Record<number, string>>({});
   const [isPhotoUploading, setIsPhotoUploading] = useState<number | null>(null);
   const [photosError, setPhotosError] = useState("");
 
@@ -70,22 +71,31 @@ export default function AdminPanel({
     if (!url.trim()) return;
     const updated = [...newPhotos];
     updated[index] = url.trim();
-    setNewPhotos(updated.filter(Boolean));
+    setNewPhotos(updated);
+    setNewPhotoPreviews(prev => ({ ...prev, [index]: url.trim() }));
   };
 
   const handleRemovePhoto = (index: number) => {
     const updated = [...newPhotos];
     updated[index] = "";
-    setNewPhotos(updated.filter(Boolean));
+    setNewPhotos(updated);
+    setNewPhotoPreviews(prev => {
+      const copy = { ...prev };
+      delete copy[index];
+      return copy;
+    });
   };
 
   const handlePortfolioPhotoUpload = async (file: File, slotIndex: number) => {
     setPhotosError("");
     setIsPhotoUploading(slotIndex);
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const uid = sessionData?.session?.user?.id || "anonymous";
+
       const uuid = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
       const extension = file.name.split('.').pop() || 'png';
-      const filePath = `companions/${companionId}/portfolio_${slotIndex}_${uuid}.${extension}`;
+      const filePath = `${uid}/companions/${companionId}/portfolio_${slotIndex}_${uuid}.${extension}`;
 
       const { error } = await supabase.storage
         .from("app-files")
@@ -101,8 +111,9 @@ export default function AdminPanel({
       reader.onloadend = () => {
         if (typeof reader.result === "string") {
           const updated = [...newPhotos];
-          updated[slotIndex] = reader.result;
-          setNewPhotos(updated.filter(Boolean));
+          updated[slotIndex] = filePath;
+          setNewPhotos(updated);
+          setNewPhotoPreviews(prev => ({ ...prev, [slotIndex]: reader.result as string }));
           setIsPhotoUploading(null);
         }
       };
@@ -176,7 +187,8 @@ export default function AdminPanel({
     setNewFeatured(false);
     setNewTagline("");
     setNewPricingTier("Silver");
-    setNewPhotos([]);
+    setNewPhotos(["", "", ""]);
+    setNewPhotoPreviews({});
     setPhotosError("");
   };
 
@@ -751,7 +763,7 @@ export default function AdminPanel({
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {[0, 1, 2].map((idx) => {
-                  const photo = newPhotos[idx];
+                  const photo = newPhotoPreviews[idx] || newPhotos[idx];
                   const isUploadingThisSlot = isPhotoUploading === idx;
 
                   return (

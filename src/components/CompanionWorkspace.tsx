@@ -73,10 +73,13 @@ export default function CompanionWorkspace({
   // Portfolio Photos states
   const [formPhotos, setFormPhotos] = useState<string[]>(() => {
     if (myCompanion && myCompanion.photos) {
-      return [...myCompanion.photos];
+      const arr = [...myCompanion.photos];
+      while (arr.length < 3) arr.push("");
+      return arr;
     }
-    return [];
+    return ["", "", ""];
   });
+  const [photoPreviews, setPhotoPreviews] = useState<Record<number, string>>({});
   const [photoInputUrl, setPhotoInputUrl] = useState("");
   const [photoInputIndex, setPhotoInputIndex] = useState<number | null>(null);
   const [isPhotoUploading, setIsPhotoUploading] = useState<number | null>(null);
@@ -103,22 +106,31 @@ export default function CompanionWorkspace({
     if (!url.trim()) return;
     const updated = [...formPhotos];
     updated[index] = url.trim();
-    setFormPhotos(updated.filter(Boolean));
+    setFormPhotos(updated);
+    setPhotoPreviews(prev => ({ ...prev, [index]: url.trim() }));
   };
 
   const handleRemovePhoto = (index: number) => {
     const updated = [...formPhotos];
     updated[index] = "";
-    setFormPhotos(updated.filter(Boolean));
+    setFormPhotos(updated);
+    setPhotoPreviews(prev => {
+      const copy = { ...prev };
+      delete copy[index];
+      return copy;
+    });
   };
 
   const handlePortfolioPhotoUpload = async (file: File, slotIndex: number) => {
     setPhotosError("");
     setIsPhotoUploading(slotIndex);
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const uid = sessionData?.session?.user?.id || "anonymous";
+
       const uuid = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
       const extension = file.name.split('.').pop() || 'png';
-      const filePath = `companions/${myCompanionId}/portfolio_${slotIndex}_${uuid}.${extension}`;
+      const filePath = `${uid}/companions/${myCompanionId}/portfolio_${slotIndex}_${uuid}.${extension}`;
 
       const { error } = await supabase.storage
         .from("app-files")
@@ -134,8 +146,9 @@ export default function CompanionWorkspace({
       reader.onloadend = () => {
         if (typeof reader.result === "string") {
           const updated = [...formPhotos];
-          updated[slotIndex] = reader.result;
-          setFormPhotos(updated.filter(Boolean));
+          updated[slotIndex] = filePath;
+          setFormPhotos(updated);
+          setPhotoPreviews(prev => ({ ...prev, [slotIndex]: reader.result as string }));
           setIsPhotoUploading(null);
         }
       };
@@ -521,7 +534,7 @@ export default function CompanionWorkspace({
           {/* Photo Slots Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
             {[0, 1, 2].map((idx) => {
-              const photo = formPhotos[idx];
+              const photo = photoPreviews[idx] || formPhotos[idx];
               const isUploadingThisSlot = isPhotoUploading === idx;
 
               return (
@@ -977,7 +990,7 @@ export default function CompanionWorkspace({
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[0, 1, 2].map((idx) => {
-              const photo = formPhotos[idx];
+              const photo = photoPreviews[idx] || formPhotos[idx];
               const isUploadingThisSlot = isPhotoUploading === idx;
 
               return (
