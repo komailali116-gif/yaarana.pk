@@ -339,7 +339,7 @@ export default function AdminPanel({
                   {/* Actions tier selection, toggle online, remove */}
                   <div className="flex flex-wrap items-center gap-2.5 justify-between sm:justify-end border-t sm:border-0 pt-2 sm:pt-0 border-[#E5E1D8]/30">
                     <div className="flex items-center gap-1">
-                      {(["Silver", "Platinum", "Gold"] as const).map(tier => (
+                      {(["Silver", "Gold", "Platinum"] as const).map(tier => (
                         <button
                           key={tier}
                           onClick={() => onUpdateCompanionTier && onUpdateCompanionTier(comp.id, tier)}
@@ -457,7 +457,7 @@ export default function AdminPanel({
                     {/* Tier selector for approval */}
                     <div className="flex items-center gap-1">
                       <span className="text-[10px] text-gray-400 font-bold mr-1 uppercase">Assign Category:</span>
-                      {(["Silver", "Platinum", "Gold"] as const).map(tier => (
+                      {(["Silver", "Gold", "Platinum"] as const).map(tier => (
                         <button
                           key={tier}
                           type="button"
@@ -885,8 +885,8 @@ export default function AdminPanel({
                   className="w-full bg-[#F3F0E9]/30 border border-[#E5E1D8] text-gray-700 rounded-xl p-2.5 text-xs focus:outline-none focus:border-[#D4AF37] cursor-pointer"
                 >
                   <option value="Silver">Silver (Base rates)</option>
-                  <option value="Platinum">Platinum (+30% Premium)</option>
-                  <option value="Gold">Gold (+70% higher than Platinum)</option>
+                  <option value="Gold">Gold (+30% Premium)</option>
+                  <option value="Platinum">Platinum (+70% over Gold)</option>
                 </select>
               </div>
 

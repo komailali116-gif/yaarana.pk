@@ -395,7 +395,7 @@ export default function CompanionWorkspace({
                     : "bg-slate-100 text-slate-700 border-slate-200"
                 }`}>
                   <span>💎</span>
-                  <span>{myCompanion.pricingTier || "Silver"} Category ({myCompanion.pricingTier === "Gold" ? "+70% higher than Platinum" : myCompanion.pricingTier === "Platinum" ? "+30% Premium" : "Base Rates"})</span>
+                  <span>{myCompanion.pricingTier || "Silver"} Category ({myCompanion.pricingTier === "Platinum" ? "+70% higher than Gold (2.21x)" : myCompanion.pricingTier === "Gold" ? "+30% Premium (1.30x)" : "Base Rates (1.00x)"})</span>
                 </span>
               </div>
               <h2 className="text-xl font-serif font-bold text-[#1A1A1A] leading-none">{myCompanion.name}</h2>

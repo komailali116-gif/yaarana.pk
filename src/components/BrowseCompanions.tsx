@@ -402,8 +402,8 @@ export default function BrowseCompanions({
             >
               <option value="All">All Categories</option>
               <option value="Silver">Silver (Base rate)</option>
-              <option value="Platinum">Platinum (+30% Premium)</option>
-              <option value="Gold">Gold (+70% over Platinum)</option>
+              <option value="Gold">Gold (+30% Premium)</option>
+              <option value="Platinum">Platinum (+70% over Gold)</option>
             </select>
           </div>
         </div>
@@ -542,7 +542,7 @@ export default function BrowseCompanions({
                   <div className="flex justify-between items-center text-[9px] text-gray-400 uppercase font-bold tracking-widest">
                     <span>Available Services & Rates:</span>
                     <span className="font-mono text-[8px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded border border-[#E5E1D8]">
-                      Rate: {comp.pricingTier === "Gold" ? "2.21x" : comp.pricingTier === "Platinum" ? "1.30x" : "1.00x"}
+                      Rate: {comp.pricingTier === "Platinum" ? "2.21x" : comp.pricingTier === "Gold" ? "1.30x" : "1.00x"}
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-1.5">

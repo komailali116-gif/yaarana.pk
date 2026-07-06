@@ -5,9 +5,9 @@ export const SERVICES: Service[] = [
     id: "dining",
     name: "Dining Companion",
     description: "Spend a beautiful 2-hour dinner with a companion. Share conversations, laughter, and gourmet meals at top-tier restaurants.",
-    basePrice: 1999,
+    basePrice: 3999,
     baseHours: 2,
-    extraHourPrice: 500,
+    extraHourPrice: 1499,
     extraUnitName: "hour",
     userResponsibility: "User covers the cost of dinner and drinks for both.",
     icon: "Utensils"
@@ -16,9 +16,9 @@ export const SERVICES: Service[] = [
     id: "movie",
     name: "Movie Companion",
     description: "Watch your favorite blockbusters or classics together. No more going to the theater alone.",
-    basePrice: 2499,
+    basePrice: 3499,
     baseHours: 3,
-    extraHourPrice: 700,
+    extraHourPrice: 999,
     extraUnitName: "hour",
     userResponsibility: "User covers cinema tickets, popcorn, and snacks for both.",
     icon: "Film"
@@ -27,9 +27,9 @@ export const SERVICES: Service[] = [
     id: "call",
     name: "Call a Companion",
     description: "Connect instantly on call through our secure, masked companion hotline. Share your thoughts and day details securely.",
-    basePrice: 1000,
+    basePrice: 1200,
     baseHours: 1, // 1 hour = 60 minutes
-    extraHourPrice: 40, // 40 PKR per extra minute
+    extraHourPrice: 20, // 20 PKR per extra minute (equivalent to 1200/hr)
     extraUnitName: "minute",
     userResponsibility: "None. All calls are placed through our masked system lines.",
     icon: "PhoneCall"
@@ -38,9 +38,9 @@ export const SERVICES: Service[] = [
     id: "day_spend",
     name: "Spend a Day",
     description: "Explore the city, visit museums, go shopping, or run errands with a friendly companion for a whole day (8 hours).",
-    basePrice: 1699,
+    basePrice: 16999,
     baseHours: 8,
-    extraHourPrice: 999,
+    extraHourPrice: 2499,
     extraUnitName: "hour",
     userResponsibility: "User provides food, entry tickets, and transport essentials.",
     icon: "Sun"
@@ -49,9 +49,9 @@ export const SERVICES: Service[] = [
     id: "travel",
     name: "Travel Companion",
     description: "Plan an adventure or a quiet trip to northern areas, beach resorts, or cultural sites to drive away loneliness.",
-    basePrice: 20999,
+    basePrice: 39999,
     baseHours: 48, // 2 days
-    extraHourPrice: 1999, // extra hour price is 1999 PKR (and doubles every additional hour - handled in calculation)
+    extraHourPrice: 2499, // extra hour price is 2499 PKR (and doubles every additional hour - handled in calculation)
     extraUnitName: "hour",
     userResponsibility: "User covers safe accommodation (separate rooms), travel tickets, and all food costs.",
     icon: "Compass"
@@ -60,9 +60,9 @@ export const SERVICES: Service[] = [
     id: "night_spend",
     name: "Spend a Night",
     description: "Spend a respectful 8-hour overnight social session with a companion. Deep conversations and peaceful night walks with strict mutual respect.",
-    basePrice: 16999,
+    basePrice: 18999,
     baseHours: 8,
-    extraHourPrice: 999,
+    extraHourPrice: 2999,
     extraUnitName: "hour",
     userResponsibility: "Strict respectful boundaries apply. User provides dinner/food and comfortable lounge seating.",
     icon: "Moon"
@@ -71,9 +71,9 @@ export const SERVICES: Service[] = [
     id: "study",
     name: "Study Companion",
     description: "Study or prepare for exams in your favorite subjects together. Keep motivated and stay focused on your academic goals.",
-    basePrice: 1499,
+    basePrice: 1999,
     baseHours: 2,
-    extraHourPrice: 499,
+    extraHourPrice: 799,
     extraUnitName: "hour",
     userResponsibility: "User arranges a public or university library workspace or cafe.",
     icon: "BookOpen"
@@ -83,8 +83,8 @@ export const SERVICES: Service[] = [
 export function getTierMultiplier(tier: string | undefined): number {
   if (!tier) return 1.0;
   const t = tier.trim().toLowerCase();
-  if (t === "platinum") return 1.30;
-  if (t === "gold") return 1.30 * 1.70; // Gold is 70% higher than Platinum rates
+  if (t === "gold") return 1.30;
+  if (t === "platinum") return 1.30 * 1.70; // Platinum is 70% higher than Gold rates (2.21x)
   return 1.0; // Silver is the base rate
 }
 
