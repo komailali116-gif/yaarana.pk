@@ -1,6 +1,7 @@
 import React, { useState } from "react";
-import { Wallet, Smartphone, ShieldCheck, AlertTriangle, ArrowLeft } from "lucide-react";
+import { Smartphone, ShieldCheck, AlertTriangle, ArrowLeft, CheckCircle2, CreditCard, Building2, Copy, Check } from "lucide-react";
 import { Companion, UserProfile } from "../types";
+import { supabase } from "../supabaseClient";
 
 interface PaymentPageProps {
   bookingDetail: {
@@ -16,67 +17,143 @@ interface PaymentPageProps {
   };
   companion: Companion;
   profile: UserProfile;
-  onPaymentSuccess: (method: "JazzCash" | "EasyPaisa", phoneNum: string) => void;
+  onSubmitSuccess: () => void;
   onCancel: () => void;
-  onTopUp: (amount: number) => void;
 }
+
+type PaymentMethod = "EasyPaisa" | "JazzCash" | "Bank";
 
 export default function PaymentPage({
   bookingDetail,
   companion,
   profile,
-  onPaymentSuccess,
-  onCancel,
-  onTopUp
+  onSubmitSuccess,
+  onCancel
 }: PaymentPageProps) {
-  const [method, setMethod] = useState<"JazzCash" | "EasyPaisa">("JazzCash");
-  const [phoneNumber, setPhoneNumber] = useState(profile.phone || "");
-  const [step, setStep] = useState(1); // 1: Input details, 2: OTP / PIN, 3: Processing
+  const [method, setMethod] = useState<PaymentMethod>("EasyPaisa");
+  const [transactionId, setTransactionId] = useState("");
+  const [lastFour, setLastFour] = useState("");
+  const [paymentNote, setPaymentNote] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
-  const [pin, setPin] = useState("");
 
-  const handleInitializePayment = (e: React.FormEvent) => {
+  const paymentDetails = {
+    EasyPaisa: {
+      accountNumber: "0345-1234567",
+      accountTitle: "Yarana Admin",
+      instructions: "Transfer the amount via EasyPaisa App or USSD code. Keep the transaction ID safe."
+    },
+    JazzCash: {
+      accountNumber: "0300-7654321",
+      accountTitle: "Yarana Admin",
+      instructions: "Transfer the amount via JazzCash App or USSD code. Keep the transaction ID safe."
+    },
+    Bank: {
+      accountNumber: "1005-98765432101",
+      accountTitle: "Yarana Private Limited",
+      bankName: "Bank Alfalah",
+      instructions: "Transfer to Bank Alfalah, Branch Code: 0210. Provide last 4 digits of your bank account."
+    }
+  };
+
+  const currentDetails = paymentDetails[method];
+
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
-    // Phone number validation for Pakistan
-    const pakPhoneRegex = /^(03|923|\+923)\d{9}$/;
-    const formattedPhone = phoneNumber.replace(/[-\s]/g, "");
-    if (!pakPhoneRegex.test(formattedPhone)) {
-      setError("Please enter a valid Pakistani mobile wallet number (e.g., 03001234567).");
+    if (!lastFour || lastFour.length < 4) {
+      setError("Please enter the last 4 digits of your sending phone/bank account.");
       return;
     }
 
-    // Check balance
-    if (profile.walletBalance < bookingDetail.totalPrice) {
-      setError(`Insufficient balance. You need ${(bookingDetail.totalPrice - profile.walletBalance).toLocaleString()} PKR more in your Yarana Wallet.`);
-      return;
-    }
+    setSubmitting(true);
 
-    setStep(2); // Go to OTP and PIN verification step
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData?.session?.user?.id;
+      
+      if (!userId) {
+        throw new Error("User session not found. Please log in again.");
+      }
+
+      // Insert record in payment_requests table
+      const { error: insertError } = await supabase.from("payment_requests").insert({
+        user_id: userId,
+        user_email: profile.email,
+        companion_id: companion.id,
+        companion_name: companion.name,
+        companion_avatar: companion.avatar,
+        service_id: bookingDetail.serviceId,
+        service_name: bookingDetail.serviceName,
+        booking_date: bookingDetail.date,
+        booking_time: bookingDetail.time,
+        duration: bookingDetail.duration,
+        total_price: bookingDetail.totalPrice,
+        meeting_location_type: bookingDetail.meetingLocationType || "Public Cafe",
+        meeting_address: bookingDetail.meetingAddress || "To be arranged",
+        meeting_instructions: bookingDetail.meetingInstructions || "",
+        transaction_id: transactionId || null,
+        last_four: lastFour,
+        payment_note: paymentNote || null,
+        status: "Pending"
+      });
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      setSuccess(true);
+    } catch (err: any) {
+      console.error("Failed to submit payment request:", err);
+      setError(err.message || "Could not save payment request. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleVerifyPayment = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-
-    if (pin.length < 4) {
-      setError("Please enter a valid 4 or 5-digit wallet MPIN.");
-      return;
-    }
-
-    // Simulated payment processing
-    setStep(3);
-    setTimeout(() => {
-      onPaymentSuccess(method, phoneNumber);
-    }, 2200);
-  };
+  if (success) {
+    return (
+      <div className="max-w-xl mx-auto bg-white border border-[#E5E1D8] text-[#2D2D2D] rounded-3xl p-6 sm:p-8 shadow-md text-center space-y-6" id="payment-page-success">
+        <div className="inline-flex p-4 rounded-full bg-green-50 border border-green-100 text-green-650 shadow-sm">
+          <CheckCircle2 className="w-10 h-10" />
+        </div>
+        <div className="space-y-2">
+          <h3 className="text-xl font-serif font-bold text-[#1A1A1A]">Payment Request Submitted</h3>
+          <p className="text-sm text-gray-500 max-w-sm mx-auto leading-relaxed">
+            Your manual payment request has been dispatched to Yarana Administrators. We will audit your transaction and approve the booking shortly!
+          </p>
+        </div>
+        <div className="bg-[#F3F0E9]/20 border border-[#E5E1D8]/60 p-4 rounded-2xl text-left text-xs font-mono space-y-1">
+          <p><span className="text-gray-400">Companion:</span> {companion.name}</p>
+          <p><span className="text-gray-400">Total Price:</span> {bookingDetail.totalPrice.toLocaleString()} PKR</p>
+          {transactionId && <p><span className="text-gray-400">Transaction ID:</span> {transactionId}</p>}
+          <p><span className="text-gray-400">Account Last 4:</span> {lastFour}</p>
+          <p><span className="text-gray-400">Status:</span> <span className="text-amber-600 font-bold">Pending Approval</span></p>
+        </div>
+        <button
+          onClick={onSubmitSuccess}
+          className="w-full py-3.5 bg-[#1A1C20] hover:bg-[#D4AF37] text-white hover:text-black font-semibold text-xs uppercase tracking-wider rounded-xl shadow-sm transition-all cursor-pointer"
+        >
+          Check My Booking Requests
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-xl mx-auto bg-white border border-[#E5E1D8] text-[#2D2D2D] rounded-3xl p-6 sm:p-8 shadow-md space-y-6" id="payment-page">
       
       {/* Back button */}
-      {step === 1 && (
+      {!submitting && (
         <button
           onClick={onCancel}
           className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-black cursor-pointer transition-all font-semibold"
@@ -96,14 +173,9 @@ export default function PaymentPage({
             className="w-12 h-12 rounded-full object-cover border border-[#E5E1D8]"
           />
           <div className="text-left">
-            <h4 className="text-[9px] font-bold text-[#D4AF37] uppercase tracking-wider leading-none">Hiring Companion</h4>
+            <h4 className="text-[9px] font-bold text-[#D4AF37] uppercase tracking-wider leading-none">Booking Summary</h4>
             <p className="text-sm font-bold text-[#1A1A1A] mt-1">{companion.name}</p>
             <p className="text-[10px] text-gray-500 leading-none mt-1">{bookingDetail.serviceName} &bull; {bookingDetail.duration} {bookingDetail.serviceId === "call" ? "mins" : "hours"}</p>
-            {bookingDetail.meetingAddress && (
-              <p className="text-[10px] text-blue-700 font-bold mt-1 bg-blue-50 border border-blue-100/50 px-2 py-0.5 rounded-md inline-block">
-                📍 {bookingDetail.meetingLocationType}: {bookingDetail.meetingAddress}
-              </p>
-            )}
           </div>
         </div>
         <div className="text-right">
@@ -112,197 +184,150 @@ export default function PaymentPage({
         </div>
       </div>
 
-      {step === 1 && (
-        <div className="space-y-5">
-          <div className="text-center">
-            <h3 className="text-xl font-serif font-bold text-[#1A1A1A]">Select Wallet Payment</h3>
-            <p className="text-xs text-gray-500 mt-1">Pay instantly using JazzCash or EasyPaisa mobile wallets.</p>
-          </div>
+      <div className="text-center space-y-1">
+        <h3 className="text-xl font-serif font-bold text-[#1A1A1A]">Manual Payment Checkout</h3>
+        <p className="text-xs text-gray-500">Choose your preferred payment method and follow the details below.</p>
+      </div>
 
-          {error && (
-            <div className="bg-red-50 border border-red-100 text-red-700 p-4 rounded-2xl text-xs flex gap-2.5 items-center shadow-sm" id="payment-error-box">
-              <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0" />
-              <div className="flex-grow">
-                <span>{error}</span>
-                {profile.walletBalance < bookingDetail.totalPrice && (
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      onClick={() => {
-                        onTopUp(10000);
-                        setError("");
-                      }}
-                      className="px-3 py-1.5 bg-[#1A1C20] hover:bg-black text-white rounded-xl font-bold text-[10px] cursor-pointer"
-                    >
-                      Top up +10K PKR (Sandbox)
-                    </button>
-                    <button
-                      onClick={() => {
-                        onTopUp(20000);
-                        setError("");
-                      }}
-                      className="px-3 py-1.5 bg-[#1A1C20] hover:bg-black text-white rounded-xl font-bold text-[10px] cursor-pointer"
-                    >
-                      Top up +20K PKR
-                    </button>
-                  </div>
-                )}
-              </div>
+      {/* Payment Method Selector */}
+      <div className="grid grid-cols-3 gap-2.5">
+        {(["EasyPaisa", "JazzCash", "Bank"] as PaymentMethod[]).map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => setMethod(m)}
+            className={`py-3 px-2 rounded-xl border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer shadow-sm ${
+              method === m
+                ? m === "EasyPaisa"
+                  ? "bg-[#3ebd5c]/5 border-[#3ebd5c] text-[#3ebd5c] scale-[1.02]"
+                  : m === "JazzCash"
+                  ? "bg-[#cb1c24]/5 border-[#cb1c24] text-[#cb1c24] scale-[1.02]"
+                  : "bg-[#1A1C20]/5 border-[#1A1C20] text-[#1A1C20] scale-[1.02]"
+                : "bg-white border-[#E5E1D8] hover:bg-gray-50 text-gray-600"
+            }`}
+          >
+            {m === "EasyPaisa" && <Smartphone className="w-4 h-4" />}
+            {m === "JazzCash" && <Smartphone className="w-4 h-4" />}
+            {m === "Bank" && <Building2 className="w-4 h-4" />}
+            <span>{m}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Payment Details Container */}
+      <div className="bg-[#F3F0E9]/40 border border-[#E5E1D8] p-5 rounded-2xl space-y-3 shadow-inner">
+        <div className="flex justify-between items-start">
+          <div>
+            <p className="text-[9px] text-gray-400 uppercase font-mono tracking-wider font-semibold">Account Title</p>
+            <p className="text-sm font-bold text-[#1A1A1A] mt-0.5">{currentDetails.accountTitle}</p>
+          </div>
+          {method === "Bank" && (
+            <div className="text-right">
+              <p className="text-[9px] text-gray-400 uppercase font-mono tracking-wider font-semibold">Bank Name</p>
+              <p className="text-xs font-bold text-[#1A1A1A] mt-0.5">{(currentDetails as any).bankName}</p>
             </div>
           )}
+        </div>
 
-          {/* Payment Method Selector */}
-          <div className="grid grid-cols-2 gap-4">
-            {/* JazzCash Option */}
-            <div
-              onClick={() => setMethod("JazzCash")}
-              className={`p-4 rounded-2xl border flex flex-col items-center justify-center gap-2 cursor-pointer transition-all shadow-sm ${
-                method === "JazzCash"
-                  ? "bg-[#cb1c24]/5 border-[#cb1c24] scale-[1.02]"
-                  : "bg-white border-[#E5E1D8] hover:bg-gray-50"
-              }`}
-              id="payment-method-jazzcash"
-            >
-              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center font-extrabold text-[#cb1c24] text-xs">
-                JC
-              </div>
-              <p className="text-xs font-bold text-gray-800">JazzCash</p>
-              <span className="text-[9px] text-gray-400">Secure Wallet Ingress</span>
-            </div>
-
-            {/* EasyPaisa Option */}
-            <div
-              onClick={() => setMethod("EasyPaisa")}
-              className={`p-4 rounded-2xl border flex flex-col items-center justify-center gap-2 cursor-pointer transition-all shadow-sm ${
-                method === "EasyPaisa"
-                  ? "bg-[#3ebd5c]/5 border-[#3ebd5c] scale-[1.02]"
-                  : "bg-white border-[#E5E1D8] hover:bg-gray-50"
-              }`}
-              id="payment-method-easypaisa"
-            >
-              <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center font-extrabold text-[#3ebd5c] text-xs">
-                EP
-              </div>
-              <p className="text-xs font-bold text-gray-800">EasyPaisa</p>
-              <span className="text-[9px] text-gray-400">Telenor Microfinance</span>
-            </div>
-          </div>
-
-          {/* Phone Form */}
-          <form onSubmit={handleInitializePayment} className="space-y-4">
-            <div className="space-y-1">
-              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
-                Registered {method} Mobile Number
-              </label>
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400">
-                  <Smartphone className="w-4 h-4" />
-                </span>
-                <input
-                  type="text"
-                  required
-                  value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value)}
-                  placeholder="e.g. 03001234567"
-                  className="w-full bg-[#F3F0E9]/30 border border-[#E5E1D8] rounded-xl py-3 pl-10 pr-3 text-gray-800 text-xs focus:outline-none focus:border-[#D4AF37] font-mono"
-                  id="payment-phone-input"
-                />
-              </div>
-              <p className="text-[10px] text-gray-400 leading-normal pt-1">
-                An instant validation charge of <strong className="text-orange-600">{bookingDetail.totalPrice.toLocaleString()} PKR</strong> will be authorized against your account.
-              </p>
-            </div>
-
-            {/* Checkout Button */}
+        <div>
+          <p className="text-[9px] text-gray-400 uppercase font-mono tracking-wider font-semibold">Account / IBAN Number</p>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-base font-extrabold text-gray-800 font-mono tracking-wide">{currentDetails.accountNumber}</span>
             <button
-              type="submit"
-              className={`w-full py-4 text-white font-semibold text-xs uppercase tracking-wider rounded-xl shadow-sm transition-all cursor-pointer flex items-center justify-center gap-2 mt-6 ${
-                method === "JazzCash"
-                  ? "bg-[#cb1c24] hover:bg-[#b0161d]"
-                  : "bg-[#3ebd5c] hover:bg-[#34a44f]"
-              }`}
-              id="payment-btn-initiate"
+              onClick={() => handleCopy(currentDetails.accountNumber)}
+              className="p-1 rounded bg-white hover:bg-gray-100 border border-[#E5E1D8] text-gray-500 cursor-pointer transition-all"
+              title="Copy account number"
             >
-              <Smartphone className="w-4.5 h-4.5" />
-              <span>Initiate {method} Checkout</span>
+              {copied ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
             </button>
-          </form>
+          </div>
         </div>
-      )}
 
-      {step === 2 && (
-        <div className="space-y-5">
-          <div className="text-center">
-            <div className="inline-flex p-3 rounded-full bg-[#FFF4E5] border border-[#FFE0B2] mb-3 text-[#D4AF37] shadow-sm animate-pulse">
-              <ShieldCheck className="w-6 h-6" />
-            </div>
-            <h3 className="text-xl font-serif font-bold text-[#1A1A1A]">Enter MPIN Securely</h3>
-            <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">A checkout notification has been dispatched to {phoneNumber}. Please supply your 4 or 5-digit wallet MPIN to confirm.</p>
+        <p className="text-[11px] text-gray-500 leading-normal italic bg-white/70 p-3 rounded-xl border border-[#E5E1D8]/40">
+          💡 {currentDetails.instructions}
+        </p>
+      </div>
+
+      {/* Submission Form */}
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {error && (
+          <div className="bg-red-50 border border-red-100 text-red-700 p-4 rounded-2xl text-xs flex gap-2.5 items-center shadow-sm">
+            <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+              Transaction ID (Optional)
+            </label>
+            <input
+              type="text"
+              value={transactionId}
+              onChange={(e) => setTransactionId(e.target.value)}
+              placeholder="e.g. TXN-982182"
+              className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-3 px-3.5 text-gray-800 text-xs focus:outline-none focus:border-[#D4AF37] font-mono"
+            />
           </div>
 
-          {error && (
-            <div className="bg-red-50 border border-red-100 text-red-700 p-3.5 rounded-2xl text-xs flex gap-2 items-center shadow-sm">
-              <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0" />
-              <span>{error}</span>
-            </div>
+          <div className="space-y-1">
+            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+              Last 4 Digits of Sender Account <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              required
+              maxLength={4}
+              value={lastFour}
+              onChange={(e) => setLastFour(e.target.value.replace(/\D/g, ""))}
+              placeholder="e.g. 4321"
+              className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-3 px-3.5 text-gray-800 text-xs focus:outline-none focus:border-[#D4AF37] font-mono font-bold"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-1">
+          <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+            Optional Payment Note
+          </label>
+          <textarea
+            value={paymentNote}
+            onChange={(e) => setPaymentNote(e.target.value)}
+            placeholder="e.g., Transferred from my personal EasyPaisa account"
+            rows={2}
+            className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-2.5 px-3.5 text-gray-800 text-xs focus:outline-none focus:border-[#D4AF37] resize-none"
+          />
+        </div>
+
+        {/* Security / Encrypted badge */}
+        <div className="flex items-center justify-center gap-1.5 text-[10px] text-gray-450 pt-1">
+          <ShieldCheck className="w-4 h-4 text-green-600" />
+          <span>Secured transaction registry. Admin validation required.</span>
+        </div>
+
+        <button
+          type="submit"
+          disabled={submitting}
+          className={`w-full py-4 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-sm transition-all cursor-pointer flex items-center justify-center gap-2 mt-4 ${
+            submitting
+              ? "bg-gray-400 cursor-not-allowed"
+              : "bg-[#1A1C20] hover:bg-[#D4AF37] hover:text-black"
+          }`}
+        >
+          {submitting ? (
+            <>
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              <span>Submitting Payment Request...</span>
+            </>
+          ) : (
+            <>
+              <CreditCard className="w-4 h-4" />
+              <span>Submit Payment Request</span>
+            </>
           )}
-
-          <form onSubmit={handleVerifyPayment} className="space-y-4">
-            <div className="space-y-1">
-              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest text-center">
-                Wallet MPIN
-              </label>
-              <input
-                type="password"
-                maxLength={5}
-                required
-                value={pin}
-                onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-                placeholder="&bull;&bull;&bull;&bull;"
-                className="w-40 mx-auto bg-[#F3F0E9]/40 border border-[#E5E1D8] rounded-xl py-3 text-center text-gray-800 text-lg font-bold tracking-[0.6em] focus:outline-none focus:border-[#D4AF37] font-mono block"
-                id="payment-mpin-input"
-              />
-            </div>
-
-            <div className="pt-2 text-center text-[10px] text-gray-400 flex items-center justify-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5 text-green-600" />
-              End-to-end encrypted under PCI-DSS standards.
-            </div>
-
-            {/* Confirm Payment Button */}
-            <div className="flex gap-3 mt-6">
-              <button
-                type="button"
-                onClick={() => setStep(1)}
-                className="w-1/3 py-3.5 bg-white border border-[#E5E1D8] text-gray-600 rounded-xl text-xs font-bold cursor-pointer transition-all hover:bg-gray-50"
-              >
-                Back
-              </button>
-              <button
-                type="submit"
-                className="w-2/3 py-3.5 bg-[#1A1C20] hover:bg-[#D4AF37] text-white hover:text-black font-semibold text-xs uppercase tracking-wider rounded-xl shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                id="payment-btn-verify"
-              >
-                <span>Authorize & Pay</span>
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {step === 3 && (
-        <div className="py-12 flex flex-col items-center justify-center space-y-4">
-          <div className="relative">
-            <div className="w-16 h-16 border-4 border-gray-100 border-t-[#D4AF37] rounded-full animate-spin" />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <Wallet className="w-6 h-6 text-[#D4AF37] animate-pulse" />
-            </div>
-          </div>
-          <div className="text-center space-y-1 animate-pulse">
-            <h3 className="text-lg font-serif font-bold text-[#1A1A1A]">Processing Transaction...</h3>
-            <p className="text-xs text-gray-400">Contacting {method} microfinance core banking channels...</p>
-          </div>
-        </div>
-      )}
+        </button>
+      </form>
 
     </div>
   );

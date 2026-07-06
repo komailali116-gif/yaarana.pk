@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { motion } from "motion/react";
-import { Companion, CompanionStatus, CompanionGender, Booking, PAKISTAN_CITIES, PakistanCity, PricingTier } from "../types";
-import { SERVICES } from "../data/services";
-import { Shield, Users, Check, X, ToggleLeft, ToggleRight, Sparkles, Plus, Trash2, ShieldAlert, Star, ListFilter, Upload, Award, Camera } from "lucide-react";
+import { Companion, CompanionStatus, CompanionGender, Booking, PAKISTAN_CITIES, PakistanCity, PricingTier, PaymentRequest } from "../types";
+import { SERVICES, saveStoredServices, getStoredMultipliers, saveStoredMultipliers, INITIAL_SERVICES } from "../data/services";
+import { Shield, Users, Check, X, ToggleLeft, ToggleRight, Sparkles, Plus, Trash2, ShieldAlert, Star, ListFilter, Upload, Award, Camera, Coins, Settings, Save, RefreshCw, Edit2, Utensils, Film, PhoneCall, Sun, Compass, Moon, BookOpen, CreditCard } from "lucide-react";
 // @ts-ignore
 import { supabase } from "../supabaseClient";
 import { countUploadedPics } from "../lib/limits";
@@ -21,25 +21,37 @@ const PRESET_AVATARS = [
 interface AdminPanelProps {
   companions: Companion[];
   bookings: Booking[];
+  paymentRequests: PaymentRequest[];
   onApproveCompanion: (id: string, tier?: PricingTier) => void;
   onRejectCompanion: (id: string) => void;
   onRemoveCompanion: (id: string) => void;
   onToggleOnline: (id: string) => void;
   onAddNewCompanion: (newComp: Companion) => void;
   onUpdateCompanionTier?: (id: string, tier: PricingTier) => void;
+  onApprovePayment: (requestId: string) => Promise<void>;
+  onRejectPayment: (requestId: string) => Promise<void>;
 }
 
 export default function AdminPanel({
   companions,
   bookings,
+  paymentRequests,
   onApproveCompanion,
   onRejectCompanion,
   onRemoveCompanion,
   onToggleOnline,
   onAddNewCompanion,
-  onUpdateCompanionTier
+  onUpdateCompanionTier,
+  onApprovePayment,
+  onRejectPayment
 }: AdminPanelProps) {
-  const [activeTab, setActiveTab] = useState<"listings" | "pending" | "add_new" | "bookings_log">("listings");
+  const [activeTab, setActiveTab] = useState<"listings" | "pending" | "add_new" | "bookings_log" | "pricing" | "payments">("listings");
+  const [localServices, setLocalServices] = useState(() => [...SERVICES]);
+  const [localMultipliers, setLocalMultipliers] = useState(() => getStoredMultipliers());
+  const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
+  const [editedBasePrice, setEditedBasePrice] = useState<string>("");
+  const [editedExtraPrice, setEditedExtraPrice] = useState<string>("");
+  const [pricingSuccess, setPricingSuccess] = useState("");
   const [newCompanionName, setNewCompanionName] = useState("");
   const [newAge, setNewAge] = useState(24);
   const [newGender, setNewGender] = useState<CompanionGender>(CompanionGender.FEMALE);
@@ -281,6 +293,33 @@ export default function AdminPanel({
         >
           <ListFilter className="w-3.5 h-3.5" />
           <span>Audit Logs ({bookings.length})</span>
+        </button>
+
+        <button
+          onClick={() => { setActiveTab("pricing"); setFormSuccess(""); setPricingSuccess(""); }}
+          className={`px-4 py-2 text-xs font-bold rounded-full uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
+            activeTab === "pricing" ? "bg-[#1A1C20] text-[#D4AF37] shadow-sm" : "text-gray-500 hover:text-black bg-[#F3F0E9]/50"
+          }`}
+          id="admin-tab-pricing"
+        >
+          <Coins className="w-3.5 h-3.5" />
+          <span>Global Pricing</span>
+        </button>
+
+        <button
+          onClick={() => { setActiveTab("payments"); setFormSuccess(""); }}
+          className={`px-4 py-2 text-xs font-bold rounded-full uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 relative ${
+            activeTab === "payments" ? "bg-[#1A1C20] text-[#D4AF37] shadow-sm" : "text-gray-500 hover:text-black bg-[#F3F0E9]/50"
+          }`}
+          id="admin-tab-payments"
+        >
+          <CreditCard className="w-3.5 h-3.5" />
+          <span>Payment Audits</span>
+          {paymentRequests.filter(r => r.status === "Pending").length > 0 && (
+            <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-bold text-white">
+              {paymentRequests.filter(r => r.status === "Pending").length}
+            </span>
+          )}
         </button>
       </div>
 
@@ -974,6 +1013,453 @@ export default function AdminPanel({
                         }`}>
                           {b.status}
                         </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === "pricing" && (
+        <div className="space-y-6" id="admin-pricing-governance-panel">
+          {/* Header Card */}
+          <div className="bg-white border border-[#E5E1D8] rounded-3xl p-6 shadow-sm">
+            <h3 className="text-base font-bold text-[#1A1A1A] flex items-center gap-2">
+              <Coins className="w-5 h-5 text-[#D4AF37]" />
+              <span>Global Services &amp; Tier Pricing Governance</span>
+            </h3>
+            <p className="text-xs text-gray-400 mt-1">
+              Configure baseline service prices (Silver tier) and control premium category multipliers. Changes are updated globally across all reservation systems immediately.
+            </p>
+            {pricingSuccess && (
+              <div className="mt-3 p-3 bg-green-50 text-green-700 text-xs font-semibold rounded-xl border border-green-100 flex items-center gap-1.5 animate-fadeIn">
+                <Check className="w-4 h-4 stroke-[3]" />
+                <span>{pricingSuccess}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Tier Multipliers Governance Card */}
+          <div className="bg-white border border-[#E5E1D8] rounded-3xl p-6 shadow-sm space-y-4">
+            <div className="border-b border-[#E5E1D8]/60 pb-3 flex justify-between items-center">
+              <div>
+                <h4 className="text-sm font-bold text-[#1A1A1A]">1. Tier Rate Multipliers</h4>
+                <p className="text-[11px] text-gray-400">Define premium rate boosts for companion tiers.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const defaultMults = { silver: 1.0, gold: 1.3, platinum: 2.21 };
+                  saveStoredMultipliers(defaultMults);
+                  setLocalMultipliers(defaultMults);
+                  setPricingSuccess("Rate multipliers reset to platform defaults successfully!");
+                  setTimeout(() => setPricingSuccess(""), 4000);
+                }}
+                className="text-[10px] uppercase font-bold tracking-widest text-gray-400 hover:text-[#D4AF37] flex items-center gap-1 transition-all cursor-pointer border-0 bg-transparent"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>Reset Multipliers</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Silver Tier */}
+              <div className="border border-[#E5E1D8] rounded-2xl p-4 bg-slate-50/50 space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Silver Tier</span>
+                  <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-mono text-[9px] font-bold">Base</span>
+                </div>
+                <p className="text-[11px] text-gray-400">Baseline cost used for all pricing computations.</p>
+                <div className="flex items-center gap-1.5 pt-1">
+                  <input
+                    type="number"
+                    disabled
+                    value={localMultipliers.silver}
+                    className="w-full bg-slate-100/80 border border-slate-200 text-slate-500 rounded-xl p-2 text-xs font-mono font-bold focus:outline-none"
+                  />
+                  <span className="text-xs text-slate-400 font-bold font-mono">x</span>
+                </div>
+              </div>
+
+              {/* Gold Tier */}
+              <div className="border border-[#E5E1D8] rounded-2xl p-4 bg-[#FDFBF7] space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-[#B8941B] uppercase tracking-wider">Gold Tier</span>
+                  <span className="px-2 py-0.5 rounded bg-[#F9F5EB] text-[#B8941B] font-mono text-[9px] font-bold">Premium</span>
+                </div>
+                <p className="text-[11px] text-gray-400">Premium surcharge boost for Gold hosts.</p>
+                <div className="flex items-center gap-1.5 pt-1">
+                  <input
+                    type="number"
+                    step="0.05"
+                    min="1.0"
+                    max="5.0"
+                    value={localMultipliers.gold}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value) || 1.0;
+                      const updated = { ...localMultipliers, gold: val };
+                      setLocalMultipliers(updated);
+                    }}
+                    className="w-full bg-white border border-[#E5E1D8] text-gray-800 rounded-xl p-2 text-xs font-mono font-bold focus:outline-none focus:border-[#D4AF37]"
+                  />
+                  <span className="text-xs text-gray-400 font-bold font-mono">x</span>
+                </div>
+              </div>
+
+              {/* Platinum Tier */}
+              <div className="border border-[#E5E1D8] rounded-2xl p-4 bg-indigo-50/20 space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Platinum Tier</span>
+                  <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 font-mono text-[9px] font-bold">Super Surcharge</span>
+                </div>
+                <p className="text-[11px] text-gray-400">Exclusive surcharge boost for Platinum hosts.</p>
+                <div className="flex items-center gap-1.5 pt-1">
+                  <input
+                    type="number"
+                    step="0.05"
+                    min="1.0"
+                    max="10.0"
+                    value={localMultipliers.platinum}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value) || 1.0;
+                      const updated = { ...localMultipliers, platinum: val };
+                      setLocalMultipliers(updated);
+                    }}
+                    className="w-full bg-white border border-[#E5E1D8] text-gray-800 rounded-xl p-2 text-xs font-mono font-bold focus:outline-none focus:border-[#D4AF37]"
+                  />
+                  <span className="text-xs text-gray-400 font-bold font-mono">x</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  saveStoredMultipliers(localMultipliers);
+                  setPricingSuccess("Premium category multipliers successfully saved!");
+                  setTimeout(() => setPricingSuccess(""), 4000);
+                }}
+                className="px-5 py-2.5 bg-[#1A1C20] hover:bg-[#D4AF37] text-white hover:text-black font-bold rounded-xl text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-all shadow-sm border-0"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>Save Multipliers</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Services Matrix Governance Board */}
+          <div className="bg-white border border-[#E5E1D8] rounded-3xl p-6 shadow-sm space-y-4">
+            <div className="border-b border-[#E5E1D8]/60 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h4 className="text-sm font-bold text-[#1A1A1A]">2. Interactive Services Pricing Matrix</h4>
+                <p className="text-[11px] text-gray-400">View and edit base prices of all core companion services directly.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm("Are you sure you want to restore all base services pricing to default values?")) {
+                    saveStoredServices(INITIAL_SERVICES);
+                    setLocalServices([...INITIAL_SERVICES]);
+                    setPricingSuccess("Baseline services pricing restored to system defaults!");
+                    setTimeout(() => setPricingSuccess(""), 4000);
+                  }
+                }}
+                className="text-[10px] uppercase font-bold tracking-widest text-red-500 hover:text-red-700 flex items-center gap-1 transition-all cursor-pointer border-0 bg-transparent self-start"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>Restore Default Services</span>
+              </button>
+            </div>
+
+            <div className="overflow-x-auto rounded-2xl border border-[#E5E1D8]">
+              <table className="w-full text-left text-xs text-gray-700 min-w-[700px]">
+                <thead className="bg-[#F3F0E9]/50 text-gray-500 uppercase font-mono text-[9px] border-b border-[#E5E1D8]">
+                  <tr>
+                    <th className="p-3">Service</th>
+                    <th className="p-3">Base Time</th>
+                    <th className="p-3 bg-slate-50 border-r border-[#E5E1D8]">Silver Rate (1.00x Base)</th>
+                    <th className="p-3 bg-yellow-50/30 border-r border-[#E5E1D8]">Gold Rate ({localMultipliers.gold.toFixed(2)}x)</th>
+                    <th className="p-3 bg-indigo-50/10">Platinum Rate ({localMultipliers.platinum.toFixed(2)}x)</th>
+                    <th className="p-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#E5E1D8]">
+                  {localServices.map((service) => {
+                    const isEditing = editingServiceId === service.id;
+                    const silBase = service.basePrice;
+                    const silExtra = service.extraHourPrice;
+
+                    // Gold Pricing
+                    const goldBase = Math.round(silBase * localMultipliers.gold);
+                    const goldExtra = Math.round(silExtra * localMultipliers.gold);
+
+                    // Platinum Pricing
+                    const platBase = Math.round(silBase * localMultipliers.platinum);
+                    const platExtra = Math.round(silExtra * localMultipliers.platinum);
+
+                    const getServiceIcon = (id: string) => {
+                      switch (id) {
+                        case "dining": return <Utensils className="w-4 h-4 text-orange-600" />;
+                        case "movie": return <Film className="w-4 h-4 text-blue-600" />;
+                        case "call": return <PhoneCall className="w-4 h-4 text-green-600" />;
+                        case "day_spend": return <Sun className="w-4 h-4 text-yellow-600" />;
+                        case "travel": return <Compass className="w-4 h-4 text-indigo-600" />;
+                        case "night_spend": return <Moon className="w-4 h-4 text-purple-600" />;
+                        case "study": return <BookOpen className="w-4 h-4 text-teal-600" />;
+                        default: return <Settings className="w-4 h-4 text-gray-600" />;
+                      }
+                    };
+
+                    return (
+                      <tr key={service.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="p-3">
+                          <div className="flex items-center gap-2">
+                            <div className="p-1.5 rounded-lg bg-[#F3F0E9]/60">
+                              {getServiceIcon(service.id)}
+                            </div>
+                            <div>
+                              <div className="font-semibold text-gray-800">{service.name}</div>
+                              <div className="text-[10px] text-gray-400 line-clamp-1 max-w-[220px]">
+                                {service.description}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="p-3 font-semibold text-gray-600">
+                          {service.baseHours} {service.id === "call" ? "minutes" : "hours"}
+                        </td>
+
+                        {/* Silver Tier (Base) */}
+                        <td className="p-3 bg-slate-50 border-r border-[#E5E1D8]">
+                          {isEditing ? (
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-1">
+                                <span className="text-[10px] text-gray-400 font-semibold w-10">Base:</span>
+                                <input
+                                  type="number"
+                                  value={editedBasePrice}
+                                  onChange={(e) => setEditedBasePrice(e.target.value)}
+                                  className="w-20 px-1.5 py-0.5 border border-[#E5E1D8] rounded text-xs font-mono font-bold bg-white text-gray-800 focus:outline-none focus:border-[#D4AF37]"
+                                />
+                                <span className="text-[10px] text-gray-500 font-semibold">PKR</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <span className="text-[10px] text-gray-400 font-semibold w-10">Extra:</span>
+                                <input
+                                  type="number"
+                                  value={editedExtraPrice}
+                                  onChange={(e) => setEditedExtraPrice(e.target.value)}
+                                  className="w-20 px-1.5 py-0.5 border border-[#E5E1D8] rounded text-xs font-mono font-bold bg-white text-gray-800 focus:outline-none focus:border-[#D4AF37]"
+                                />
+                                <span className="text-[10px] text-gray-500 font-semibold">PKR / {service.extraUnitName}</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-0.5">
+                              <div className="font-bold text-gray-800">{silBase.toLocaleString()} PKR</div>
+                              <div className="text-[10px] text-gray-400 font-mono">
+                                +{silExtra.toLocaleString()} PKR / {service.extraUnitName}
+                              </div>
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Gold Tier Surcharge */}
+                        <td className="p-3 bg-yellow-50/20 border-r border-[#E5E1D8] font-medium text-[#B8941B]">
+                          {isEditing ? (
+                            <div className="text-[10px] text-gray-400 italic">Auto-calculated from Base</div>
+                          ) : (
+                            <div className="space-y-0.5">
+                              <div className="font-bold">{goldBase.toLocaleString()} PKR</div>
+                              <div className="text-[10px] font-mono text-gray-400">
+                                +{goldExtra.toLocaleString()} PKR / {service.extraUnitName}
+                              </div>
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Platinum Tier Surcharge */}
+                        <td className="p-3 bg-indigo-50/5 font-medium text-indigo-700">
+                          {isEditing ? (
+                            <div className="text-[10px] text-gray-400 italic">Auto-calculated from Base</div>
+                          ) : (
+                            <div className="space-y-0.5">
+                              <div className="font-bold">{platBase.toLocaleString()} PKR</div>
+                              <div className="text-[10px] font-mono text-gray-400">
+                                +{platExtra.toLocaleString()} PKR / {service.extraUnitName}
+                              </div>
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Actions */}
+                        <td className="p-3 text-right">
+                          {isEditing ? (
+                            <div className="flex justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updatedBase = parseInt(editedBasePrice) || service.basePrice;
+                                  const updatedExtra = parseInt(editedExtraPrice) || service.extraHourPrice;
+                                  const updatedServices = localServices.map(s => {
+                                    if (s.id === service.id) {
+                                      return {
+                                        ...s,
+                                        basePrice: updatedBase,
+                                        extraHourPrice: updatedExtra
+                                      };
+                                    }
+                                    return s;
+                                  });
+                                  saveStoredServices(updatedServices);
+                                  setLocalServices(updatedServices);
+                                  setEditingServiceId(null);
+                                  setPricingSuccess(`Baseline rates for ${service.name} updated successfully!`);
+                                  setTimeout(() => setPricingSuccess(""), 4000);
+                                }}
+                                className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-[10px] font-bold flex items-center gap-1 shadow-sm cursor-pointer border-0"
+                              >
+                                <Check className="w-3 h-3" />
+                                <span>Save</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingServiceId(null)}
+                                className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded text-[10px] font-bold flex items-center gap-1 border border-gray-200 cursor-pointer"
+                              >
+                                <X className="w-3 h-3" />
+                                <span>Cancel</span>
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingServiceId(service.id);
+                                setEditedBasePrice(service.basePrice.toString());
+                                setEditedExtraPrice(service.extraHourPrice.toString());
+                              }}
+                              className="px-2.5 py-1 text-gray-600 hover:text-black hover:bg-gray-100 rounded-md border border-[#E5E1D8] text-[10px] font-bold flex items-center gap-1 ml-auto cursor-pointer bg-white"
+                            >
+                              <Edit2 className="w-3 h-3" />
+                              <span>Edit Rates</span>
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "payments" && (
+        <div className="bg-white border border-[#E5E1D8] rounded-3xl p-6 shadow-sm space-y-6" id="admin-payments-panel">
+          <div className="border-b border-[#E5E1D8]/60 pb-3">
+            <h3 className="text-lg font-serif font-bold text-[#1A1A1A]">Manual Payment Request Audits</h3>
+            <p className="text-xs text-gray-400">Review, approve, or reject guest transactions to unlock companion sessions.</p>
+          </div>
+
+          {paymentRequests.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center text-gray-400">
+              <CreditCard className="w-10 h-10 text-gray-300 mb-2" />
+              <p className="text-sm font-semibold">No payment requests recorded yet.</p>
+              <p className="text-xs">Incoming user transfers will populate here automatically.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border border-[#E5E1D8] shadow-sm">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-[#F3F0E9]/50 border-b border-[#E5E1D8]/80 text-[10px] uppercase tracking-wider font-bold text-gray-500">
+                    <th className="p-4">User & Submission Time</th>
+                    <th className="p-4">Requested Product</th>
+                    <th className="p-4">Transaction Details</th>
+                    <th className="p-4 text-right">Amount</th>
+                    <th className="p-4 text-center">Status</th>
+                    <th className="p-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#E5E1D8]/45 text-[#2D2D2D]">
+                  {paymentRequests.map((req) => (
+                    <tr key={req.id} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="p-4">
+                        <div className="font-bold text-gray-800">{req.userEmail || "Anonymous Guest"}</div>
+                        <div className="text-[10px] text-gray-450 mt-0.5">ID: {req.userId.substring(0, 8)}...</div>
+                        <div className="text-[10px] text-gray-450 mt-0.5">{new Date(req.createdAt).toLocaleString()}</div>
+                      </td>
+                      <td className="p-4">
+                        <div className="flex items-center gap-2">
+                          <img
+                            src={req.companionAvatar}
+                            alt={req.companionName}
+                            referrerPolicy="no-referrer"
+                            className="w-7 h-7 rounded-full object-cover border border-[#E5E1D8]"
+                          />
+                          <div>
+                            <div className="font-semibold text-gray-800">with {req.companionName}</div>
+                            <div className="text-[10px] text-[#D4AF37] font-bold uppercase tracking-wider mt-0.5">{req.serviceName}</div>
+                            <div className="text-[10px] text-gray-500 mt-0.5">{req.bookingDate} @ {req.bookingTime} ({req.duration} {req.serviceId === "call" ? "mins" : "hours"})</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-4 space-y-1">
+                        <div>
+                          <span className="text-[10px] font-bold text-gray-400 uppercase">TXN ID:</span>{" "}
+                          <span className="font-mono text-gray-800 font-semibold bg-gray-100 px-1.5 py-0.5 rounded">{req.transactionId || "N/A"}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold text-gray-400 uppercase">Sender (Last 4):</span>{" "}
+                          <span className="font-mono text-gray-800 font-bold bg-gray-100 px-1.5 py-0.5 rounded">{req.lastFour}</span>
+                        </div>
+                        {req.paymentNote && (
+                          <div className="text-[10px] text-gray-500 italic max-w-xs truncate" title={req.paymentNote}>
+                            "{req.paymentNote}"
+                          </div>
+                        )}
+                      </td>
+                      <td className="p-4 text-right font-bold text-gray-800">
+                        {req.totalPrice.toLocaleString()} PKR
+                      </td>
+                      <td className="p-4 text-center">
+                        <span
+                          className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border shadow-sm ${
+                            req.status === "Pending"
+                              ? "bg-amber-50 border-amber-200 text-amber-700"
+                              : req.status === "Approved"
+                              ? "bg-green-50 border-green-200 text-green-700"
+                              : "bg-red-50 border-red-200 text-red-700"
+                          }`}
+                        >
+                          {req.status}
+                        </span>
+                      </td>
+                      <td className="p-4 text-right">
+                        {req.status === "Pending" ? (
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => onRejectPayment(req.id)}
+                              className="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-100 rounded-lg text-[10px] font-bold uppercase transition-all cursor-pointer flex items-center gap-0.5"
+                            >
+                              <X className="w-3 h-3" /> Reject
+                            </button>
+                            <button
+                              onClick={() => onApprovePayment(req.id)}
+                              className="px-2.5 py-1.5 bg-green-50 hover:bg-green-105 text-green-800 border border-green-105 rounded-lg text-[10px] font-bold uppercase transition-all cursor-pointer flex items-center gap-0.5 shadow-sm"
+                            >
+                              <Check className="w-3 h-3" /> Approve
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-gray-400 italic">Audited</span>
+                        )}
                       </td>
                     </tr>
                   ))}

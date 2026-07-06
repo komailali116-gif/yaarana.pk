@@ -116,7 +116,7 @@ export interface Booking {
   duration: number; // hours or minutes
   totalPrice: number;
   status: "pending" | "paid" | "completed" | "cancelled";
-  paymentMethod?: "JazzCash" | "EasyPaisa";
+  paymentMethod?: "JazzCash" | "EasyPaisa" | "Manual" | "Bank";
   paymentNumber?: string;
   meetingLocationType?: string;
   meetingAddress?: string;
@@ -140,7 +140,29 @@ export interface UserProfile {
   phone: string;
   city: string;
   avatar: string;
-  walletBalance: number; // in PKR
   isAdmin: boolean;
   selectedRole?: "client" | "companion";
+}
+
+export interface PaymentRequest {
+  id: string;
+  userId: string;
+  companionId: string;
+  companionName: string;
+  companionAvatar: string;
+  serviceId: string;
+  serviceName: string;
+  bookingDate: string;
+  bookingTime: string;
+  duration: number;
+  totalPrice: number;
+  meetingLocationType: string;
+  meetingAddress: string;
+  meetingInstructions: string;
+  transactionId: string;
+  lastFour: string;
+  paymentNote: string;
+  status: "Pending" | "Approved" | "Rejected";
+  createdAt: string;
+  userEmail?: string;
 }

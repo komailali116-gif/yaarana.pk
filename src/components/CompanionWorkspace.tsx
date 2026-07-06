@@ -427,7 +427,7 @@ export default function CompanionWorkspace({
           <div className="bg-white border border-[#E5E1D8] p-5 rounded-2xl shadow-sm">
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Your Earnings</span>
             <p className="text-2xl font-black text-green-600 mt-1">{totalEarnings.toLocaleString()} PKR</p>
-            <p className="text-[10px] text-gray-400 mt-1">Processed securely to your wallet/mobile cash.</p>
+            <p className="text-[10px] text-gray-400 mt-1">Processed securely through manual payment channels.</p>
           </div>
           <div className="bg-white border border-[#E5E1D8] p-5 rounded-2xl shadow-sm">
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Total Bookings</span>

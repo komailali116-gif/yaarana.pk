@@ -112,7 +112,7 @@ export default function Navbar({
                   }`}
                   id="nav-tab-bookings"
                 >
-                  Bookings & Wallet
+                  My Bookings
                 </button>
                 <button
                   onClick={() => setCurrentTab("safety")}
@@ -157,18 +157,7 @@ export default function Navbar({
               </button>
             )}
 
-            {/* Wallet Balance Badge */}
-            {!isCompanionMode && !profile.isAdmin && (
-              <div 
-                onClick={() => setCurrentTab("account")}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#FFF4E5] border border-[#FFE0B2] text-[#E65100] text-xs font-bold cursor-pointer hover:opacity-90 transition-all"
-                title="PKR Wallet Balance. Click to top up."
-                id="nav-wallet-badge"
-              >
-                <Wallet className="w-3.5 h-3.5 text-orange-500" />
-                <span>{profile.walletBalance.toLocaleString()} PKR</span>
-              </div>
-            )}
+
 
             {/* Quick Demo Role Switcher */}
             <button

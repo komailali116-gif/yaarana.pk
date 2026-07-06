@@ -12,7 +12,7 @@ import SafetyPage from "./components/SafetyPage";
 import AdminPanel from "./components/AdminPanel";
 import RoleSelectionPage from "./components/RoleSelectionPage";
 import CompanionWorkspace from "./components/CompanionWorkspace";
-import { Companion, Booking, Review, UserProfile, CompanionStatus } from "./types";
+import { Companion, Booking, Review, UserProfile, CompanionStatus, PaymentRequest } from "./types";
 import { INITIAL_COMPANIONS } from "./data/companions";
 // @ts-ignore
 import { supabase } from "./supabaseClient";
@@ -39,7 +39,6 @@ function mapProfileFromDB(dbProfile: any): UserProfile {
     phone: dbProfile.phone || "",
     city: dbProfile.city || "Lahore",
     avatar: dbProfile.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150",
-    walletBalance: Number(dbProfile.wallet_balance ?? 0),
     isAdmin: Boolean(dbProfile.is_admin),
     selectedRole: dbProfile.selected_role || undefined,
   };
@@ -53,7 +52,6 @@ function mapProfileToDB(profile: UserProfile, userId: string): any {
     phone: profile.phone,
     city: profile.city,
     avatar: profile.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150",
-    wallet_balance: profile.walletBalance,
     is_admin: profile.isAdmin,
     selected_role: profile.selectedRole || null,
     updated_at: new Date().toISOString()
@@ -231,6 +229,7 @@ export default function App() {
   const [companions, setCompanions] = useState<Companion[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [paymentRequests, setPaymentRequests] = useState<PaymentRequest[]>([]);
 
   // Navigation & Dialog states
   const [currentTab, setCurrentTab] = useState("browse");
@@ -247,6 +246,52 @@ export default function App() {
     meetingAddress?: string;
     meetingInstructions?: string;
   } | null>(null);
+
+  const loadPaymentRequests = async (currentProfile: UserProfile | null, userId?: string) => {
+    if (!userId) {
+      setPaymentRequests([]);
+      return;
+    }
+    try {
+      let query = supabase.from("payment_requests").select("*").order("created_at", { ascending: false });
+      
+      // If NOT admin, filter by user_id
+      if (currentProfile && !currentProfile.isAdmin) {
+        query = query.eq("user_id", userId);
+      }
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      
+      if (data) {
+        const mapped: PaymentRequest[] = data.map((pr: any) => ({
+          id: pr.id,
+          userId: pr.user_id,
+          companionId: pr.companion_id,
+          companionName: pr.companion_name,
+          companionAvatar: pr.companion_avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150",
+          serviceId: pr.service_id,
+          serviceName: pr.service_name,
+          bookingDate: pr.booking_date,
+          bookingTime: pr.booking_time,
+          duration: pr.duration,
+          totalPrice: Number(pr.total_price),
+          meetingLocationType: pr.meeting_location_type || "",
+          meetingAddress: pr.meeting_address || "",
+          meetingInstructions: pr.meeting_instructions || "",
+          transactionId: pr.transaction_id || "",
+          lastFour: pr.last_four,
+          paymentNote: pr.payment_note || "",
+          status: pr.status as any,
+          createdAt: pr.created_at,
+          userEmail: pr.user_email || ""
+        }));
+        setPaymentRequests(mapped);
+      }
+    } catch (err) {
+      console.error("Failed to load payment requests:", err);
+    }
+  };
 
   // Load Companions, Reviews and Bookings from Supabase, or use elegant seeds as fallback
   const loadCompanionsAndReviews = async (currentProfile: UserProfile | null, userId?: string) => {
@@ -359,11 +404,15 @@ export default function App() {
       } else {
         setBookings([]);
       }
+      
+      // 4. Fetch Payment Requests from Supabase
+      await loadPaymentRequests(currentProfile, userId);
     } catch (err) {
       console.error("Failed to load data from Supabase, falling back to offline seeds:", err);
       setCompanions(getStoredCompanions());
       setReviews(getStoredReviews());
       setBookings(getStoredBookings());
+      setPaymentRequests([]);
     }
   };
 
@@ -394,7 +443,6 @@ export default function App() {
               phone: metadata.phone || "0300-1234567",
               city: metadata.city || "Lahore",
               avatar: metadata.avatar || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150`,
-              walletBalance: 0,
               isAdmin: isAdmin,
             };
             const { error: insertError } = await supabase.from("profiles").insert(mapProfileToDB(initialProfile, userId));
@@ -485,15 +533,7 @@ export default function App() {
     handleUpdateProfile(updated);
   };
 
-  // Top up user balance
-  const handleTopUp = (amount: number) => {
-    if (!user) return;
-    const updated = {
-      ...user,
-      walletBalance: user.walletBalance + amount
-    };
-    handleUpdateProfile(updated);
-  };
+
 
   // Switch between admin and client user easily for testing
   const handleToggleAdminRole = () => {
@@ -542,72 +582,55 @@ export default function App() {
     }
   };
 
-  // Execute payment transaction & confirm booking
-  const handlePaymentSuccess = async (method: "JazzCash" | "EasyPaisa", phoneNum: string) => {
-    if (!user || !selectedCompanion || !checkoutBooking) return;
-
-    // 1. Deduct amount
-    const updatedUser = {
-      ...user,
-      walletBalance: user.walletBalance - checkoutBooking.totalPrice
-    };
-    await handleUpdateProfile(updatedUser);
-
-    // 2. Create booking object
-    const newBooking: Booking = {
-      id: "book_" + Date.now(),
-      companionId: selectedCompanion.id,
-      companionName: selectedCompanion.name,
-      companionAvatar: selectedCompanion.avatar,
-      serviceId: checkoutBooking.serviceId,
-      serviceName: checkoutBooking.serviceName,
-      date: checkoutBooking.date,
-      time: checkoutBooking.time,
-      duration: checkoutBooking.duration,
-      totalPrice: checkoutBooking.totalPrice,
-      status: "paid",
-      paymentMethod: method,
-      paymentNumber: phoneNum,
-      meetingLocationType: checkoutBooking.meetingLocationType || "Public Cafe",
-      meetingAddress: checkoutBooking.meetingAddress || "To be arranged",
-      meetingInstructions: checkoutBooking.meetingInstructions || "",
-      createdAt: new Date().toISOString()
-    };
-
-    const updatedBookings = [...bookings, newBooking];
-    setBookings(updatedBookings);
-    saveStoredBookings(updatedBookings);
-
+  const loadBookings = async (currentProfile: UserProfile | null) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        await supabase.from("bookings").insert(mapBookingToDB(newBooking, session.user.id));
+      if (!session) return;
+      const userId = session.user.id;
+
+      let bookingsQuery = supabase.from("bookings").select("*").order("created_at", { ascending: false });
+      if (currentProfile && !currentProfile.isAdmin) {
+        bookingsQuery = bookingsQuery.eq("user_id", userId);
+      }
+      const { data: dbBookings, error: bookError } = await bookingsQuery;
+      if (!bookError && dbBookings) {
+        const mappedBookings = dbBookings.map(b => {
+          const booking = mapBookingFromDB(b);
+          const comp = companions.find(c => c.id === booking.companionId);
+          if (comp) {
+            booking.companionAvatar = comp.avatar;
+          }
+          return booking;
+        });
+        setBookings(mappedBookings);
       }
     } catch (err) {
-      console.error("Failed to persist booking to database:", err);
+      console.error("Failed to load bookings:", err);
     }
+  };
 
-    // Reset modals and switch view
+  // Callback when a manual payment request is successfully saved in Supabase
+  const handlePaymentRequestSubmitted = async () => {
     setCheckoutBooking(null);
     setSelectedCompanion(null);
+    
+    // Refresh user's payment request logs
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      await loadPaymentRequests(user, session.user.id);
+    }
+    
     setCurrentTab("bookings");
   };
 
-  // Cancel booking and process refund
+  // Cancel booking (without wallet refund)
   const handleCancelBooking = async (bookingId: string) => {
     if (!user) return;
     
     const targetBooking = bookings.find(b => b.id === bookingId);
     if (!targetBooking || targetBooking.status !== "paid") return;
 
-    // 1. Process refund
-    const updatedUser = {
-      ...user,
-      walletBalance: user.walletBalance + targetBooking.totalPrice
-    };
-    await handleUpdateProfile(updatedUser);
-
-    // 2. Update booking status
+    // 1. Update booking status
     const updatedBookings = bookings.map(b => {
       if (b.id === bookingId) {
         return { ...b, status: "cancelled" as const };
@@ -622,6 +645,79 @@ export default function App() {
       await supabase.from("bookings").update({ status: "cancelled" }).eq("id", bookingId);
     } catch (err) {
       console.error("Failed to cancel booking on Supabase database:", err);
+    }
+  };
+
+  // Admin approves manual payment
+  const handleApprovePayment = async (requestId: string) => {
+    try {
+      const req = paymentRequests.find(r => r.id === requestId);
+      if (!req) return;
+
+      // 1. Update request status to Approved in database
+      const { error: updateError } = await supabase
+        .from("payment_requests")
+        .update({ status: "Approved" })
+        .eq("id", requestId);
+      if (updateError) throw updateError;
+
+      // 2. Create actual paid booking in database
+      const newBooking: Booking = {
+        id: "book_" + Date.now(),
+        companionId: req.companionId,
+        companionName: req.companionName,
+        companionAvatar: req.companionAvatar,
+        serviceId: req.serviceId,
+        serviceName: req.serviceName,
+        date: req.bookingDate,
+        time: req.bookingTime,
+        duration: req.duration,
+        totalPrice: req.totalPrice,
+        status: "paid",
+        paymentMethod: "Manual",
+        paymentNumber: req.lastFour,
+        meetingLocationType: req.meetingLocationType || "Public Cafe",
+        meetingAddress: req.meetingAddress || "To be arranged",
+        meetingInstructions: req.meetingInstructions || "",
+        createdAt: new Date().toISOString()
+      };
+
+      const { error: insertBookingError } = await supabase
+        .from("bookings")
+        .insert(mapBookingToDB(newBooking, req.userId));
+      
+      if (insertBookingError) throw insertBookingError;
+
+      // 3. Reload logs & bookings lists
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        await loadPaymentRequests(user, session.user.id);
+      }
+      await loadBookings(user);
+    } catch (err: any) {
+      console.error("Failed to approve payment:", err);
+      alert("Error approving payment request: " + err.message);
+    }
+  };
+
+  // Admin rejects manual payment
+  const handleRejectPayment = async (requestId: string) => {
+    try {
+      // Update request status to Rejected in database
+      const { error: updateError } = await supabase
+        .from("payment_requests")
+        .update({ status: "Rejected" })
+        .eq("id", requestId);
+      if (updateError) throw updateError;
+
+      // Reload logs
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        await loadPaymentRequests(user, session.user.id);
+      }
+    } catch (err: any) {
+      console.error("Failed to reject payment:", err);
+      alert("Error rejecting payment request: " + err.message);
     }
   };
 
@@ -922,10 +1018,10 @@ export default function App() {
                 <AccountInfo
                   profile={user}
                   bookings={bookings}
+                  paymentRequests={paymentRequests}
                   onUpdateProfile={handleUpdateProfile}
                   onCancelBooking={handleCancelBooking}
                   onCompleteBooking={handleCompleteBooking}
-                  onTopUp={handleTopUp}
                 />
               )}
 
@@ -981,12 +1077,15 @@ export default function App() {
                 <AdminPanel
                   companions={companions}
                   bookings={bookings}
+                  paymentRequests={paymentRequests}
                   onApproveCompanion={handleApproveCompanion}
                   onRejectCompanion={handleRejectCompanion}
                   onRemoveCompanion={handleRemoveCompanion}
                   onToggleOnline={handleToggleOnline}
                   onAddNewCompanion={handleAddNewCompanion}
                   onUpdateCompanionTier={handleUpdateCompanionTier}
+                  onApprovePayment={handleApprovePayment}
+                  onRejectPayment={handleRejectPayment}
                 />
               )}
             </div>
@@ -1012,8 +1111,7 @@ export default function App() {
                 companion={selectedCompanion}
                 profile={user}
                 onCancel={() => setCheckoutBooking(null)}
-                onPaymentSuccess={handlePaymentSuccess}
-                onTopUp={handleTopUp}
+                onSubmitSuccess={handlePaymentRequestSubmitted}
               />
             </div>
           )}

@@ -1,6 +1,6 @@
 import { Service } from "../types";
 
-export const SERVICES: Service[] = [
+export const INITIAL_SERVICES: Service[] = [
   {
     id: "dining",
     name: "Dining Companion",
@@ -80,12 +80,61 @@ export const SERVICES: Service[] = [
   }
 ];
 
+export const SERVICES: Service[] = (() => {
+  if (typeof window !== "undefined") {
+    const stored = localStorage.getItem("yarana_services");
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch (e) {
+        return [...INITIAL_SERVICES];
+      }
+    }
+  }
+  return [...INITIAL_SERVICES];
+})();
+
+export function saveStoredServices(newServices: Service[]) {
+  if (typeof window !== "undefined") {
+    localStorage.setItem("yarana_services", JSON.stringify(newServices));
+  }
+  SERVICES.length = 0;
+  SERVICES.push(...newServices);
+}
+
+const DEFAULT_MULTIPLIERS = {
+  silver: 1.0,
+  gold: 1.30,
+  platinum: 2.21
+};
+
+export function getStoredMultipliers(): { silver: number; gold: number; platinum: number } {
+  if (typeof window !== "undefined") {
+    const stored = localStorage.getItem("yarana_multipliers");
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch (e) {
+        return { ...DEFAULT_MULTIPLIERS };
+      }
+    }
+  }
+  return { ...DEFAULT_MULTIPLIERS };
+}
+
+export function saveStoredMultipliers(multipliers: { silver: number; gold: number; platinum: number }) {
+  if (typeof window !== "undefined") {
+    localStorage.setItem("yarana_multipliers", JSON.stringify(multipliers));
+  }
+}
+
 export function getTierMultiplier(tier: string | undefined): number {
   if (!tier) return 1.0;
   const t = tier.trim().toLowerCase();
-  if (t === "gold") return 1.30;
-  if (t === "platinum") return 1.30 * 1.70; // Platinum is 70% higher than Gold rates (2.21x)
-  return 1.0; // Silver is the base rate
+  const mults = getStoredMultipliers();
+  if (t === "gold") return mults.gold;
+  if (t === "platinum") return mults.platinum;
+  return mults.silver; // Silver is the base rate
 }
 
 export function calculatePrice(serviceId: string, duration: number, tier?: string): number {

@@ -69,7 +69,6 @@ export const DEFAULT_USER: UserProfile = {
   phone: "",
   city: "Lahore",
   avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=200",
-  walletBalance: 0, // PKR
   isAdmin: false
 };
 
@@ -79,7 +78,6 @@ export const DEFAULT_ADMIN: UserProfile = {
   phone: "0300-7654321",
   city: "Islamabad",
   avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=200",
-  walletBalance: 999999,
   isAdmin: true
 };
 

@@ -56,7 +56,6 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
           phone: metadata.phone || "0300-1234567",
           city: metadata.city || "Lahore",
           avatar: metadata.avatar || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150`,
-          walletBalance: 0,
           isAdmin: isAdmin,
         });
       } catch (err: any) {
@@ -103,7 +102,6 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
           phone: phone,
           city: city as any,
           avatar: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150`,
-          walletBalance: 0,
           isAdmin: false,
         });
       } catch (err: any) {

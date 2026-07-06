@@ -1,23 +1,23 @@
 import React, { useState } from "react";
-import { UserProfile, Booking } from "../types";
-import { User, Wallet, Phone, Mail, MapPin, Edit3, Save, Calendar, Clock, Star, AlertCircle, CheckCircle2 } from "lucide-react";
+import { UserProfile, Booking, PaymentRequest } from "../types";
+import { User, Wallet, Phone, Mail, MapPin, Edit3, Save, Calendar, Clock, Star, AlertCircle, CheckCircle2, CreditCard } from "lucide-react";
 
 interface AccountInfoProps {
   profile: UserProfile;
   bookings: Booking[];
+  paymentRequests: PaymentRequest[];
   onUpdateProfile: (updated: UserProfile) => void;
   onCancelBooking: (bookingId: string) => void;
   onCompleteBooking: (bookingId: string, rating: number, comment: string) => void;
-  onTopUp: (amount: number) => void;
 }
 
 export default function AccountInfo({
   profile,
   bookings,
+  paymentRequests,
   onUpdateProfile,
   onCancelBooking,
-  onCompleteBooking,
-  onTopUp
+  onCompleteBooking
 }: AccountInfoProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(profile.name);
@@ -170,42 +170,45 @@ export default function AccountInfo({
           )}
         </div>
 
-        {/* Sandbox Wallet Top Up Panel */}
+        {/* Manual Payment Requests Panel */}
         <div className="bg-white border border-[#E5E1D8] rounded-3xl p-6 shadow-sm space-y-4">
           <div className="flex items-center gap-2 pb-2.5 border-b border-[#E5E1D8]/60">
-            <Wallet className="w-5 h-5 text-[#D4AF37]" />
-            <h4 className="text-sm font-bold text-[#1A1A1A]">Yarana Wallet Account</h4>
+            <CreditCard className="w-5 h-5 text-[#D4AF37]" />
+            <h4 className="text-sm font-bold text-[#1A1A1A]">Payment Audits Log ({paymentRequests.length})</h4>
           </div>
           
-          <div className="bg-[#FFF4E5] p-5 rounded-2xl text-center border border-[#FFE0B2]">
-            <p className="text-[10px] text-orange-800/60 uppercase font-mono tracking-wider font-semibold">Available Balance</p>
-            <p className="text-3xl font-black text-[#E65100] mt-1">{profile.walletBalance.toLocaleString()} PKR</p>
-          </div>
-
-          <div className="space-y-3">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Top Up Balance (Demo Sandbox)</p>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                onClick={() => onTopUp(5000)}
-                className="py-2 text-xs bg-[#F3F0E9] hover:bg-[#E5E1D8]/50 border border-[#E5E1D8] text-gray-800 font-bold rounded-xl cursor-pointer transition-all shadow-sm"
-              >
-                +5,000
-              </button>
-              <button
-                onClick={() => onTopUp(10000)}
-                className="py-2 text-xs bg-[#F3F0E9] hover:bg-[#E5E1D8]/50 border border-[#E5E1D8] text-gray-800 font-bold rounded-xl cursor-pointer transition-all shadow-sm"
-              >
-                +10,000
-              </button>
-              <button
-                onClick={() => onTopUp(20000)}
-                className="py-2 text-xs bg-[#F3F0E9] hover:bg-[#E5E1D8]/50 border border-[#E5E1D8] text-gray-800 font-bold rounded-xl cursor-pointer transition-all shadow-sm"
-              >
-                +20,000
-              </button>
+          {paymentRequests.length === 0 ? (
+            <p className="text-xs text-gray-400 italic py-6 text-center">No payment requests submitted yet.</p>
+          ) : (
+            <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
+              {paymentRequests.map((req) => (
+                <div key={req.id} className="p-3 rounded-xl bg-[#F3F0E9]/30 border border-[#E5E1D8]/50 text-xs space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-[#1A1A1A]">{req.companionName}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                      req.status === "Pending"
+                        ? "bg-amber-100 text-amber-850"
+                        : req.status === "Approved"
+                        ? "bg-green-100 text-green-800"
+                        : "bg-red-100 text-red-800"
+                    }`}>
+                      {req.status}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-gray-500 text-[10px]">
+                    <span>{req.serviceName} &bull; {req.totalPrice.toLocaleString()} PKR</span>
+                  </div>
+                  <div className="text-[9px] text-gray-400 flex justify-between items-center font-mono">
+                    <span>Sender: ...{req.lastFour}</span>
+                    <span>{new Date(req.createdAt).toLocaleDateString()}</span>
+                  </div>
+                </div>
+              ))}
             </div>
-            <p className="text-[9px] text-gray-400 text-center italic">Simulating secure JazzCash / EasyPaisa sandbox gateway</p>
-          </div>
+          )}
+          <p className="text-[10px] text-gray-400 italic text-center">
+            Review status updates in real-time. Admins typically audit within 15 minutes.
+          </p>
         </div>
       </div>
 
