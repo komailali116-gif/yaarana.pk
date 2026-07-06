@@ -73,8 +73,8 @@ export const DEFAULT_USER: UserProfile = {
 };
 
 export const DEFAULT_ADMIN: UserProfile = {
-  name: "Yarana Admin",
-  email: "admin@yarana.pk",
+  name: "Yarana Owner",
+  email: "komailali116@gmail.com",
   phone: "0300-7654321",
   city: "Islamabad",
   avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=200",

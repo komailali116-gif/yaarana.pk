@@ -48,7 +48,7 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
 
         const userObj = data.user;
         const metadata = userObj?.user_metadata || {};
-        const isAdmin = email.toLowerCase() === "admin@yarana.pk";
+        const isAdmin = email.toLowerCase() === "komailali116@gmail.com";
 
         onLoginSuccess({
           name: metadata.name || email.split("@")[0].split(".").map((s: string) => s.charAt(0).toUpperCase() + s.slice(1)).join(" ") || "Yarana Member",
@@ -133,16 +133,10 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
     }
   };
 
-  const fillTestCredentials = (isAdminAcc: boolean) => {
-    if (isAdminAcc) {
-      setEmail("admin@yarana.pk");
-      setPassword("admin123");
-      setIsLogin(true);
-    } else {
-      setEmail("user@yarana.pk");
-      setPassword("user123");
-      setIsLogin(true);
-    }
+  const fillTestCredentials = () => {
+    setEmail("user@yarana.pk");
+    setPassword("user123");
+    setIsLogin(true);
   };
 
   return (
@@ -346,18 +340,12 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
             <Info className="w-3.5 h-3.5 text-[#D4AF37]" />
             <span>Sandbox Test Accounts:</span>
           </div>
-          <div className="grid grid-cols-2 gap-2 mt-1">
+          <div className="mt-1">
             <button
-              onClick={() => fillTestCredentials(false)}
-              className="px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-mono text-[9px] text-center truncate cursor-pointer transition-all border border-[#E5E1D8]/40"
+              onClick={() => fillTestCredentials()}
+              className="w-full px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-mono text-[9px] text-center truncate cursor-pointer transition-all border border-[#E5E1D8]/40"
             >
-              Client Account
-            </button>
-            <button
-              onClick={() => fillTestCredentials(true)}
-              className="px-3 py-2 rounded-xl bg-[#FFF4E5] hover:bg-[#FFE0B2] text-[#E65100] font-mono text-[9px] text-center truncate cursor-pointer transition-all border border-[#FFE0B2]"
-            >
-              Admin Account
+              Demo Client Account
             </button>
           </div>
         </div>

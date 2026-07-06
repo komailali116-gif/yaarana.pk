@@ -160,15 +160,17 @@ export default function Navbar({
 
 
             {/* Quick Demo Role Switcher */}
-            <button
-              onClick={onToggleAdmin}
-              className="hidden sm:flex items-center gap-1 px-3 py-1.5 rounded-full bg-[#F3F0E9] text-[11px] font-semibold text-gray-600 hover:text-[#D4AF37] cursor-pointer transition-all border border-[#E5E1D8]"
-              title="Quickly toggle between regular User and Admin roles for testing!"
-              id="nav-toggle-admin-role"
-            >
-              <RefreshCw className="w-3 h-3 text-[#D4AF37]" />
-              <span>{profile.isAdmin ? "Use Client" : "Use Admin"}</span>
-            </button>
+            {profile.email?.toLowerCase() === "komailali116@gmail.com" && (
+              <button
+                onClick={onToggleAdmin}
+                className="hidden sm:flex items-center gap-1 px-3 py-1.5 rounded-full bg-[#F3F0E9] text-[11px] font-semibold text-gray-600 hover:text-[#D4AF37] cursor-pointer transition-all border border-[#E5E1D8]"
+                title="Quickly toggle between regular User and Admin roles for testing!"
+                id="nav-toggle-admin-role"
+              >
+                <RefreshCw className="w-3 h-3 text-[#D4AF37]" />
+                <span>{profile.isAdmin ? "Use Client" : "Use Admin"}</span>
+              </button>
+            )}
 
             {/* Profile Avatar Trigger */}
             <div 

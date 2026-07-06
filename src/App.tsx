@@ -433,10 +433,16 @@ export default function App() {
           const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
           if (data) {
             profileData = mapProfileFromDB(data);
+            // Ensure ONLY the owner (komailali116@gmail.com) can ever be an admin.
+            if (profileData.email.toLowerCase() === "komailali116@gmail.com") {
+              profileData.isAdmin = true;
+            } else {
+              profileData.isAdmin = false;
+            }
           } else {
             const email = session.user.email || "";
             const metadata = session.user.user_metadata || {};
-            const isAdmin = email.toLowerCase() === "admin@yarana.pk";
+            const isAdmin = email.toLowerCase() === "komailali116@gmail.com";
             const initialProfile: UserProfile = {
               name: metadata.name || email.split("@")[0].split(".").map((s: string) => s.charAt(0).toUpperCase() + s.slice(1)).join(" ") || "Yarana Member",
               email: email,
@@ -538,12 +544,17 @@ export default function App() {
   // Switch between admin and client user easily for testing
   const handleToggleAdminRole = () => {
     if (!user) return;
+    if (user.email.toLowerCase() !== "komailali116@gmail.com") {
+      alert("Access Denied: Only the owner (komailali116@gmail.com) can access the admin panel.");
+      return;
+    }
     if (user.isAdmin) {
-      const normalUser = { ...DEFAULT_USER, selectedRole: "client" as const };
+      const normalUser = { ...user, isAdmin: false, selectedRole: "client" as const };
       handleUpdateProfile(normalUser);
       setCurrentTab("browse");
     } else {
-      handleUpdateProfile(DEFAULT_ADMIN);
+      const adminUser = { ...user, isAdmin: true };
+      handleUpdateProfile(adminUser);
       setCurrentTab("admin");
     }
   };
