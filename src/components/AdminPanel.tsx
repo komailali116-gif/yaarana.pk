@@ -364,7 +364,7 @@ export default function AdminPanel({
               { id: "dashboard", label: "Dashboard Overview", icon: Activity },
               { id: "users", label: "User Governance", icon: Users },
               { id: "companions", label: "Companions Catalog", icon: Award },
-              { id: "payments", label: "Payment Audits", icon: CreditCard },
+              { id: "payments", label: "Payment Requests", icon: CreditCard },
               { id: "pricing", label: "Pricing Matrices", icon: Coins },
               { id: "content", label: "Content Hub", icon: Settings },
               { id: "logs", label: "Activity Logs", icon: FileText }
@@ -1040,8 +1040,8 @@ export default function AdminPanel({
           <div className="bg-white border border-[#E5E1D8] rounded-3xl p-6 shadow-sm space-y-6 animate-fade-in">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
               <div>
-                <h3 className="text-base font-serif font-black text-[#1A1A1A] tracking-tight">Manual Payment Verification Center</h3>
-                <p className="text-xs text-gray-500 mt-1">Audit billing slips, verify EasyPaisa/JazzCash ledger reference IDs, and unlock paid bookings.</p>
+                <h3 className="text-base font-serif font-black text-[#1A1A1A] tracking-tight">Manual Payment Requests Hub</h3>
+                <p className="text-xs text-gray-500 mt-1">Review pending subscription activations and companion booking manual payments, verify references, and approve accounts.</p>
               </div>
               <select
                 value={paymentStatusFilter}
@@ -1108,8 +1108,8 @@ export default function AdminPanel({
                             <p className="text-[10px] text-gray-500">{request.serviceName} &bull; {request.companionName}</p>
                           </td>
                           <td className="py-3 px-4">
-                            <p className="font-bold text-gray-800">{extended.senderAccountNumber ? `Manual (${extended.senderAccountNumber.substring(0,4)}...)` : "Mobile Money"}</p>
-                            <p className="text-[10px] text-gray-400 font-mono">ID: {request.transactionId}</p>
+                            <p className="font-bold text-[#1A1A1A]">{extended.method || "EasyPaisa / JazzCash"}</p>
+                            <p className="text-[10px] text-gray-450 font-mono">ID: {request.transactionId}</p>
                           </td>
                           <td className="py-3 px-4 text-gray-500 font-mono text-[10px]">
                             {new Date(request.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
@@ -1583,11 +1583,19 @@ export default function AdminPanel({
                     <div className="space-y-5">
                       <div className="bg-[#F3F0E9]/30 border border-[#E5E1D8]/60 p-4 rounded-2xl space-y-2">
                         <div className="flex justify-between border-b border-gray-100 pb-2">
+                          <span className="text-gray-400 font-bold uppercase tracking-wider text-[8px] font-mono">Client Email</span>
+                          <span className="font-bold text-gray-950 font-mono">{selectedPaymentDetail.userEmail}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-gray-100 pb-2">
                           <span className="text-gray-400 font-bold uppercase tracking-wider text-[8px] font-mono">Service Rendered</span>
                           <span className="font-bold text-gray-900">{selectedPaymentDetail.serviceName}</span>
                         </div>
                         <div className="flex justify-between border-b border-gray-100 pb-2">
-                          <span className="text-gray-400 font-bold uppercase tracking-wider text-[8px] font-mono">Verification Slips</span>
+                          <span className="text-gray-400 font-bold uppercase tracking-wider text-[8px] font-mono">Payment Method</span>
+                          <span className="font-bold text-[#D4AF37]">{extended.method || "EasyPaisa / JazzCash"}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-gray-100 pb-2">
+                          <span className="text-gray-400 font-bold uppercase tracking-wider text-[8px] font-mono">Amount Paid</span>
                           <span className="font-extrabold text-orange-600 font-mono">{selectedPaymentDetail.totalPrice.toLocaleString()} PKR</span>
                         </div>
                         <div className="flex justify-between border-b border-gray-100 pb-2">

@@ -9,6 +9,7 @@ interface AccountInfoProps {
   onUpdateProfile: (updated: UserProfile) => void;
   onCancelBooking: (bookingId: string) => void;
   onCompleteBooking: (bookingId: string, rating: number, comment: string) => void;
+  onPaySubscription: () => void;
 }
 
 export default function AccountInfo({
@@ -17,13 +18,31 @@ export default function AccountInfo({
   paymentRequests,
   onUpdateProfile,
   onCancelBooking,
-  onCompleteBooking
+  onCompleteBooking,
+  onPaySubscription
 }: AccountInfoProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(profile.name);
   const [email, setEmail] = useState(profile.email);
   const [phone, setPhone] = useState(profile.phone);
   const [city, setCity] = useState(profile.city);
+
+  const isSubscriptionActive = profile.isAdmin || profile.selectedRole === "companion" || paymentRequests.some(pr => pr.companionId === "subscription" && pr.status === "Approved");
+  const isSubscriptionPending = paymentRequests.some(pr => pr.companionId === "subscription" && pr.status === "Pending");
+  const isSubscriptionRejected = paymentRequests.some(pr => pr.companionId === "subscription" && pr.status === "Rejected");
+  const rejectedSubscriptionRequest = paymentRequests.find(pr => pr.companionId === "subscription" && pr.status === "Rejected");
+
+  const parseSafeNote = (noteStr: string) => {
+    try {
+      const parsed = JSON.parse(noteStr);
+      return parsed.adminNote || "";
+    } catch {
+      if (noteStr.includes("Admin Note:")) {
+        return noteStr.split("Admin Note:")[1]?.trim() || "";
+      }
+      return "";
+    }
+  };
 
   // Review state
   const [reviewBookingId, setReviewBookingId] = useState<string | null>(null);
@@ -168,6 +187,75 @@ export default function AccountInfo({
               </div>
             </form>
           )}
+        </div>
+
+        {/* Account Subscription / Activation Card */}
+        <div className="bg-white border border-[#E5E1D8] rounded-3xl p-6 shadow-sm space-y-4">
+          <div className="flex items-center gap-2 pb-2.5 border-b border-[#E5E1D8]/60">
+            <span className="p-1 rounded-full bg-[#D4AF37]/10 text-[#D4AF37]">👑</span>
+            <h4 className="text-sm font-bold text-[#1A1A1A]">Subscription & Membership</h4>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-gray-500 font-medium">Account Status</span>
+              {isSubscriptionActive ? (
+                <span className="px-2.5 py-1 bg-green-50 text-green-700 border border-green-200 rounded-full font-bold text-[10px] uppercase tracking-wider flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                  Active / Paid
+                </span>
+              ) : isSubscriptionPending ? (
+                <span className="px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-full font-bold text-[10px] uppercase tracking-wider flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  Pending Review
+                </span>
+              ) : (
+                <span className="px-2.5 py-1 bg-red-50 text-red-700 border border-red-200 rounded-full font-bold text-[10px] uppercase tracking-wider flex items-center gap-1">
+                  Inactive / Unpaid
+                </span>
+              )}
+            </div>
+
+            {/* Notification messages for Rejected or Inactive subscriptions */}
+            {isSubscriptionRejected && rejectedSubscriptionRequest && (
+              <div className="bg-red-50 border border-red-100 p-3 rounded-2xl text-[11px] text-red-850 space-y-1">
+                <p className="font-bold">⚠️ Subscription Request Rejected</p>
+                <p className="text-red-600 leading-relaxed font-sans">
+                  The admin has reviewed your payment slip and rejected it. Reason:{" "}
+                  <span className="italic font-bold">
+                    {parseSafeNote(rejectedSubscriptionRequest.paymentNote) || "Invalid transaction details."}
+                  </span>
+                </p>
+              </div>
+            )}
+
+            {!isSubscriptionActive && !isSubscriptionPending && (
+              <div className="space-y-3 pt-1">
+                <p className="text-[11px] text-gray-500 leading-relaxed">
+                  To view verified companion listings and book security-cleared physical sessions or phone calls, your Yarana account must be activated with a premium lifetime subscription.
+                </p>
+                <button
+                  onClick={onPaySubscription}
+                  className="w-full py-2.5 bg-[#1A1C20] hover:bg-[#D4AF37] hover:text-black text-white rounded-xl font-bold transition-all text-xs flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                >
+                  <CreditCard className="w-3.5 h-3.5 text-[#D4AF37]" />
+                  <span>Activate Premium (PKR 4,999)</span>
+                </button>
+              </div>
+            )}
+
+            {isSubscriptionPending && (
+              <p className="text-[11px] text-gray-500 leading-relaxed italic bg-amber-50/40 p-3 rounded-xl border border-amber-100/60 text-center">
+                ⏳ Your payment is currently being audited. We are verifying the transaction ID and screenshot. Account features will unlock immediately upon approval!
+              </p>
+            )}
+
+            {isSubscriptionActive && (
+              <p className="text-[11px] text-green-700 leading-relaxed font-sans font-medium bg-green-50/50 p-3 rounded-xl border border-green-150 text-center">
+                🎉 Congratulations! Your account has a fully verified active subscription. Enjoy premium safety-audited companionship services on Yarana.pk!
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Manual Payment Requests Panel */}

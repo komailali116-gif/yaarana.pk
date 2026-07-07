@@ -823,6 +823,38 @@ export default function App() {
     setCurrentTab("bookings");
   };
 
+  const handleOpenSubscriptionPayment = () => {
+    const subscriptionBookingDetail = {
+      serviceId: "membership",
+      serviceName: "Yarana Lifetime Membership Subscription",
+      date: "Lifetime",
+      time: "Immediate",
+      duration: 1,
+      totalPrice: 4999
+    };
+    const subscriptionCompanion: Companion = {
+      id: "subscription",
+      name: "Yarana Premium Membership",
+      avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=200",
+      city: "Islamabad",
+      gender: "Male" as any,
+      services: [],
+      pricingTier: "Gold",
+      tagline: "Yarana official system account",
+      reviewsCount: 0,
+      rating: 5,
+      isOnline: true,
+      status: "Approved" as any,
+      age: 25,
+      bio: "Official system account for payment processing.",
+      languages: ["Urdu", "English"],
+      interests: ["Support"],
+      featured: false
+    };
+    setCheckoutBooking(subscriptionBookingDetail);
+    setSelectedCompanion(subscriptionCompanion);
+  };
+
   // Cancel booking (without wallet refund)
   const handleCancelBooking = async (bookingId: string) => {
     if (!user) return;
@@ -849,44 +881,57 @@ export default function App() {
   };
 
   // Admin approves manual payment
-  const handleApprovePayment = async (requestId: string) => {
+  const handleApprovePayment = async (requestId: string, adminNote?: string) => {
     try {
       const req = paymentRequests.find(r => r.id === requestId);
       if (!req) return;
 
       // 1. Update request status to Approved in database
+      const updateData: any = { status: "Approved" };
+      if (adminNote) {
+        try {
+          const parsed = parsePaymentNote(req.paymentNote);
+          parsed.adminNote = adminNote;
+          updateData.payment_note = stringifyPaymentNote(parsed);
+        } catch (e) {
+          updateData.payment_note = req.paymentNote + " | Admin Note: " + adminNote;
+        }
+      }
+
       const { error: updateError } = await supabase
         .from("payment_requests")
-        .update({ status: "Approved" })
+        .update(updateData)
         .eq("id", requestId);
       if (updateError) throw updateError;
 
-      // 2. Create actual paid booking in database
-      const newBooking: Booking = {
-        id: "book_" + Date.now(),
-        companionId: req.companionId,
-        companionName: req.companionName,
-        companionAvatar: req.companionAvatar,
-        serviceId: req.serviceId,
-        serviceName: req.serviceName,
-        date: req.bookingDate,
-        time: req.bookingTime,
-        duration: req.duration,
-        totalPrice: req.totalPrice,
-        status: "paid",
-        paymentMethod: "Manual",
-        paymentNumber: req.lastFour,
-        meetingLocationType: req.meetingLocationType || "Public Cafe",
-        meetingAddress: req.meetingAddress || "To be arranged",
-        meetingInstructions: req.meetingInstructions || "",
-        createdAt: new Date().toISOString()
-      };
+      // 2. Create actual paid booking in database (only if not subscription)
+      if (req.companionId !== "subscription") {
+        const newBooking: Booking = {
+          id: "book_" + Date.now(),
+          companionId: req.companionId,
+          companionName: req.companionName,
+          companionAvatar: req.companionAvatar,
+          serviceId: req.serviceId,
+          serviceName: req.serviceName,
+          date: req.bookingDate,
+          time: req.bookingTime,
+          duration: req.duration,
+          totalPrice: req.totalPrice,
+          status: "paid",
+          paymentMethod: "Manual",
+          paymentNumber: req.lastFour,
+          meetingLocationType: req.meetingLocationType || "Public Cafe",
+          meetingAddress: req.meetingAddress || "To be arranged",
+          meetingInstructions: req.meetingInstructions || "",
+          createdAt: new Date().toISOString()
+        };
 
-      const { error: insertBookingError } = await supabase
-        .from("bookings")
-        .insert(mapBookingToDB(newBooking, req.userId));
-      
-      if (insertBookingError) throw insertBookingError;
+        const { error: insertBookingError } = await supabase
+          .from("bookings")
+          .insert(mapBookingToDB(newBooking, req.userId));
+        
+        if (insertBookingError) throw insertBookingError;
+      }
 
       // 3. Reload logs & bookings lists
       const { data: { session } } = await supabase.auth.getSession();
@@ -901,12 +946,24 @@ export default function App() {
   };
 
   // Admin rejects manual payment
-  const handleRejectPayment = async (requestId: string) => {
+  const handleRejectPayment = async (requestId: string, adminNote?: string) => {
     try {
+      const req = paymentRequests.find(r => r.id === requestId);
+      const updateData: any = { status: "Rejected" };
+      if (req && adminNote) {
+        try {
+          const parsed = parsePaymentNote(req.paymentNote);
+          parsed.adminNote = adminNote;
+          updateData.payment_note = stringifyPaymentNote(parsed);
+        } catch (e) {
+          updateData.payment_note = req.paymentNote + " | Admin Note: " + adminNote;
+        }
+      }
+
       // Update request status to Rejected in database
       const { error: updateError } = await supabase
         .from("payment_requests")
-        .update({ status: "Rejected" })
+        .update(updateData)
         .eq("id", requestId);
       if (updateError) throw updateError;
 
@@ -1262,6 +1319,7 @@ export default function App() {
                   onUpdateProfile={handleUpdateProfile}
                   onCancelBooking={handleCancelBooking}
                   onCompleteBooking={handleCompleteBooking}
+                  onPaySubscription={handleOpenSubscriptionPayment}
                 />
               )}
 

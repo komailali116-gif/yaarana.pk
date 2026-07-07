@@ -21,7 +21,7 @@ interface PaymentPageProps {
   onCancel: () => void;
 }
 
-type PaymentMethod = "EasyPaisa" | "JazzCash" | "Bank";
+type PaymentMethod = "EasyPaisa" | "JazzCash";
 
 export default function PaymentPage({
   bookingDetail,
@@ -34,6 +34,7 @@ export default function PaymentPage({
   const [senderName, setSenderName] = useState(profile.name || "");
   const [senderAccountNumber, setSenderAccountNumber] = useState("");
   const [transactionId, setTransactionId] = useState("");
+  const [amountPaid, setAmountPaid] = useState<number>(bookingDetail.totalPrice);
   const [lastFour, setLastFour] = useState("");
   const [paymentNote, setPaymentNote] = useState("");
   const [paymentDateTime, setPaymentDateTime] = useState(() => {
@@ -58,20 +59,14 @@ export default function PaymentPage({
 
   const paymentDetails = {
     EasyPaisa: {
-      accountNumber: "0345-1234567",
-      accountTitle: "Yarana Admin",
+      accountNumber: "03095523073",
+      accountTitle: "MUHAMMAD ASHRAF",
       instructions: "Transfer the amount via EasyPaisa App or USSD code. Keep the transaction ID safe."
     },
     JazzCash: {
-      accountNumber: "0300-7654321",
-      accountTitle: "Yarana Admin",
+      accountNumber: "03009453388",
+      accountTitle: "SHAHZAIB",
       instructions: "Transfer the amount via JazzCash App or USSD code. Keep the transaction ID safe."
-    },
-    Bank: {
-      accountNumber: "1005-98765432101",
-      accountTitle: "Yarana Private Limited",
-      bankName: "Bank Alfalah",
-      instructions: "Transfer to Bank Alfalah, Branch Code: 0210. Provide last 4 digits of your bank account."
     }
   };
 
@@ -132,6 +127,16 @@ export default function PaymentPage({
       return;
     }
 
+    if (!transactionId.trim()) {
+      setError("Please enter the transaction ID.");
+      return;
+    }
+
+    if (!amountPaid || amountPaid <= 0) {
+      setError("Please enter a valid positive amount paid.");
+      return;
+    }
+
     if (!lastFour || lastFour.length < 4) {
       setError("Please enter the last 4 digits of your sending phone/bank account.");
       return;
@@ -159,7 +164,8 @@ export default function PaymentPage({
         senderAccountNumber,
         paymentDateTime,
         screenshotUrl: uploadedPath,
-      });
+        method: method
+      } as any);
 
       // Insert record in payment_requests table
       const { error: insertError } = await supabase.from("payment_requests").insert({
@@ -173,11 +179,11 @@ export default function PaymentPage({
         booking_date: bookingDetail.date,
         booking_time: bookingDetail.time,
         duration: bookingDetail.duration,
-        total_price: bookingDetail.totalPrice,
+        total_price: amountPaid,
         meeting_location_type: bookingDetail.meetingLocationType || "Public Cafe",
         meeting_address: bookingDetail.meetingAddress || "To be arranged",
         meeting_instructions: bookingDetail.meetingInstructions || "",
-        transaction_id: transactionId || "M-REF-" + Date.now().toString().slice(-6),
+        transaction_id: transactionId,
         last_four: lastFour,
         payment_note: extendedNote,
         status: "Pending"
@@ -268,8 +274,8 @@ export default function PaymentPage({
       </div>
 
       {/* Payment Method Selector */}
-      <div className="grid grid-cols-3 gap-2.5">
-        {(["EasyPaisa", "JazzCash", "Bank"] as PaymentMethod[]).map((m) => (
+      <div className="grid grid-cols-2 gap-2.5">
+        {(["EasyPaisa", "JazzCash"] as PaymentMethod[]).map((m) => (
           <button
             key={m}
             type="button"
@@ -278,15 +284,11 @@ export default function PaymentPage({
               method === m
                 ? m === "EasyPaisa"
                   ? "bg-[#3ebd5c]/5 border-[#3ebd5c] text-[#3ebd5c] scale-[1.02]"
-                  : m === "JazzCash"
-                  ? "bg-[#cb1c24]/5 border-[#cb1c24] text-[#cb1c24] scale-[1.02]"
-                  : "bg-[#1A1C20]/5 border-[#1A1C20] text-[#1A1C20] scale-[1.02]"
+                  : "bg-[#cb1c24]/5 border-[#cb1c24] text-[#cb1c24] scale-[1.02]"
                 : "bg-white border-[#E5E1D8] hover:bg-gray-50 text-gray-600"
             }`}
           >
-            {m === "EasyPaisa" && <Smartphone className="w-4 h-4" />}
-            {m === "JazzCash" && <Smartphone className="w-4 h-4" />}
-            {m === "Bank" && <Building2 className="w-4 h-4" />}
+            <Smartphone className="w-4 h-4" />
             <span>{m}</span>
           </button>
         ))}
@@ -299,12 +301,6 @@ export default function PaymentPage({
             <p className="text-[9px] text-gray-400 uppercase font-mono tracking-wider font-semibold">Account Title</p>
             <p className="text-sm font-bold text-[#1A1A1A] mt-0.5">{currentDetails.accountTitle}</p>
           </div>
-          {method === "Bank" && (
-            <div className="text-right">
-              <p className="text-[9px] text-gray-400 uppercase font-mono tracking-wider font-semibold">Bank Name</p>
-              <p className="text-xs font-bold text-[#1A1A1A] mt-0.5">{(currentDetails as any).bankName}</p>
-            </div>
-          )}
         </div>
 
         <div>
@@ -411,17 +407,35 @@ export default function PaymentPage({
           </div>
         </div>
 
-        <div className="space-y-1">
-          <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-            Transaction ID or Reference
-          </label>
-          <input
-            type="text"
-            value={transactionId}
-            onChange={(e) => setTransactionId(e.target.value)}
-            placeholder="e.g. TXN-10029302 (Optional)"
-            className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-3 px-3.5 text-gray-800 text-xs focus:outline-none focus:border-[#D4AF37] font-mono"
-          />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+              Transaction ID or Reference <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              required
+              value={transactionId}
+              onChange={(e) => setTransactionId(e.target.value)}
+              placeholder="e.g. TXN-10029302"
+              className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-3 px-3.5 text-gray-800 text-xs focus:outline-none focus:border-[#D4AF37] font-mono"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+              Amount Paid (PKR) <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="number"
+              required
+              min={1}
+              value={amountPaid}
+              onChange={(e) => setAmountPaid(Number(e.target.value))}
+              placeholder="e.g. 5000"
+              className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-3 px-3.5 text-gray-800 text-xs focus:outline-none focus:border-[#D4AF37] font-mono font-bold text-orange-600"
+            />
+          </div>
         </div>
 
         {/* Drag-and-drop or manual upload of screenshots */}
