@@ -158,7 +158,7 @@ export default function Navbar({
 
 
             {/* Quick Demo Role Switcher */}
-            {profile.email?.toLowerCase() === "komailali116@gmail.com" && (
+            {(profile.isAdmin || profile.email?.toLowerCase() === "komailali116@gmail.com") && (
               <button
                 onClick={onToggleAdmin}
                 className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-[#F3F0E9] text-[10px] sm:text-[11px] font-semibold text-gray-600 hover:text-[#D4AF37] cursor-pointer transition-all border border-[#E5E1D8]"

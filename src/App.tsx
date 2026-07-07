@@ -646,9 +646,11 @@ export default function App() {
           const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
           if (data) {
             profileData = mapProfileFromDB(data);
+            const email = (profileData.email || session.user.email || "").toLowerCase();
             // Ensure ONLY the owner (komailali116@gmail.com) can ever be an admin.
-            if (profileData.email.toLowerCase() === "komailali116@gmail.com") {
+            if (email === "komailali116@gmail.com") {
               profileData.isAdmin = true;
+              profileData.email = "komailali116@gmail.com";
             } else {
               profileData.isAdmin = false;
             }
