@@ -1,22 +1,9 @@
 import React, { useState } from "react";
-import { motion } from "motion/react";
-import { Companion, CompanionStatus, CompanionGender, Booking, PAKISTAN_CITIES, PakistanCity, PricingTier, PaymentRequest } from "../types";
-import { SERVICES, saveStoredServices, getStoredMultipliers, saveStoredMultipliers, INITIAL_SERVICES } from "../data/services";
-import { Shield, Users, Check, X, ToggleLeft, ToggleRight, Sparkles, Plus, Trash2, ShieldAlert, Star, ListFilter, Upload, Award, Camera, Coins, Settings, Save, RefreshCw, Edit2, Utensils, Film, PhoneCall, Sun, Compass, Moon, BookOpen, CreditCard } from "lucide-react";
-// @ts-ignore
+import { motion, AnimatePresence } from "motion/react";
+import { Companion, CompanionStatus, CompanionGender, Booking, PAKISTAN_CITIES, PakistanCity, PricingTier, PaymentRequest, UserProfile, parsePaymentNote } from "../types";
+import { SERVICES, INITIAL_SERVICES } from "../data/services";
+import { Shield, Users, Check, X, Sparkles, Plus, Trash2, ShieldAlert, Star, ListFilter, Upload, Award, Camera, Coins, Settings, Save, RefreshCw, Edit2, CreditCard, Search, Ban, Eye, FileText, CheckCircle2, TrendingUp, DollarSign, ArrowUpRight, Activity } from "lucide-react";
 import { supabase } from "../supabaseClient";
-import { countUploadedPics } from "../lib/limits";
-
-const PRESET_AVATARS = [
-  { url: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=400", gender: "Female", label: "Friendly Sana" },
-  { url: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=400", gender: "Female", label: "Artistic Aisha" },
-  { url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=400", gender: "Female", label: "Stylish Zara" },
-  { url: "https://images.unsplash.com/photo-1567532939604-b6b5b0db2604?auto=format&fit=crop&q=80&w=400", gender: "Female", label: "Warm Fatima" },
-  { url: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=400", gender: "Male", label: "Corporate Sameer" },
-  { url: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&q=80&w=400", gender: "Male", label: "Elegant Hamza" },
-  { url: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=400", gender: "Male", label: "Active Bilal" },
-  { url: "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?auto=format&fit=crop&q=80&w=400", gender: "Male", label: "Smart Kamran" }
-];
 
 interface AdminPanelProps {
   companions: Companion[];
@@ -28,8 +15,26 @@ interface AdminPanelProps {
   onToggleOnline: (id: string) => void;
   onAddNewCompanion: (newComp: Companion) => void;
   onUpdateCompanionTier?: (id: string, tier: PricingTier) => void;
-  onApprovePayment: (requestId: string) => Promise<void>;
-  onRejectPayment: (requestId: string) => Promise<void>;
+  onApprovePayment: (requestId: string, adminNote?: string) => Promise<void>;
+  onRejectPayment: (requestId: string, adminNote?: string) => Promise<void>;
+  user: UserProfile;
+  allProfiles: UserProfile[];
+  appSettings: {
+    announcement: string;
+    bannerEnabled: boolean;
+    bannerText: string;
+    silverMultiplier: number;
+    goldMultiplier: number;
+    platinumMultiplier: number;
+    membershipSilverFee: number;
+    membershipGoldFee: number;
+    membershipPlatinumFee: number;
+    adminLogs: any[];
+  };
+  onUpdateSettings: (newSettings: any) => Promise<void>;
+  onSuspendUser: (userId: string, isSuspended: boolean) => Promise<void>;
+  onDeleteUser: (userId: string) => Promise<void>;
+  onEditCompanionProfile: (id: string, updatedFields: Partial<Companion>) => Promise<void>;
 }
 
 export default function AdminPanel({
@@ -43,1458 +48,1584 @@ export default function AdminPanel({
   onAddNewCompanion,
   onUpdateCompanionTier,
   onApprovePayment,
-  onRejectPayment
+  onRejectPayment,
+  user,
+  allProfiles,
+  appSettings,
+  onUpdateSettings,
+  onSuspendUser,
+  onDeleteUser,
+  onEditCompanionProfile
 }: AdminPanelProps) {
-  const [activeTab, setActiveTab] = useState<"listings" | "pending" | "add_new" | "bookings_log" | "pricing" | "payments">("listings");
-  const [localServices, setLocalServices] = useState(() => [...SERVICES]);
-  const [localMultipliers, setLocalMultipliers] = useState(() => getStoredMultipliers());
-  const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
-  const [editedBasePrice, setEditedBasePrice] = useState<string>("");
-  const [editedExtraPrice, setEditedExtraPrice] = useState<string>("");
-  const [pricingSuccess, setPricingSuccess] = useState("");
-  const [newCompanionName, setNewCompanionName] = useState("");
-  const [newAge, setNewAge] = useState(24);
-  const [newGender, setNewGender] = useState<CompanionGender>(CompanionGender.FEMALE);
-  const [newCity, setNewCity] = useState<PakistanCity>("Lahore");
-  const [newBio, setNewBio] = useState("");
-  const [newLanguages, setNewLanguages] = useState("Urdu, English");
-  const [newInterests, setNewInterests] = useState("Reading, Movies, Coffee");
-  const [newServices, setNewServices] = useState<string[]>(["dining", "call", "study"]);
-  const [newAvatarUrl, setNewAvatarUrl] = useState("");
-  const [avatarPreview, setAvatarPreview] = useState("");
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadError, setUploadError] = useState("");
-  const [companionId, setCompanionId] = useState(() => "comp_" + Date.now());
-  const [selectedPresetIdx, setSelectedPresetIdx] = useState(-1);
-  const [newFeatured, setNewFeatured] = useState(false);
-  const [newTagline, setNewTagline] = useState("");
-  const [newPricingTier, setNewPricingTier] = useState<"Silver" | "Platinum" | "Gold">("Silver");
-  const [formSuccess, setFormSuccess] = useState("");
-  const [showLimitModal, setShowLimitModal] = useState(false);
-  const [pendingTiers, setPendingTiers] = useState<Record<string, "Silver" | "Platinum" | "Gold">>({});
+  // Strict Owner Guard check
+  const isAuthorizedOwner = user?.email?.toLowerCase() === "komailali116@gmail.com";
 
-  // Portfolio Photos states for Admin creation
-  const [newPhotos, setNewPhotos] = useState<string[]>(["", "", ""]);
-  const [newPhotoPreviews, setNewPhotoPreviews] = useState<Record<number, string>>({});
-  const [isPhotoUploading, setIsPhotoUploading] = useState<number | null>(null);
-  const [photosError, setPhotosError] = useState("");
+  if (!isAuthorizedOwner) {
+    return (
+      <div className="max-w-md mx-auto my-12 bg-white border border-red-100 rounded-3xl p-8 text-center space-y-6 shadow-md animate-fade-in" id="admin-access-denied">
+        <div className="inline-flex p-4 rounded-full bg-red-50 text-red-600 shadow-sm animate-pulse">
+          <ShieldAlert className="w-12 h-12" />
+        </div>
+        <div className="space-y-2">
+          <h3 className="text-xl font-serif font-bold text-gray-900">Governance Clearance Denied</h3>
+          <p className="text-sm text-gray-500 leading-relaxed">
+            This administrative control system is strictly limited to the platform owner. Your access attempt has been logged.
+          </p>
+        </div>
+        <div className="p-3.5 bg-gray-50 border border-[#E5E1D8] rounded-xl text-left text-xs font-mono space-y-1">
+          <p><span className="text-gray-400">Clearance Level:</span> <span className="text-red-600 font-bold">LOCKED</span></p>
+          <p><span className="text-gray-400">Attempt Email:</span> {user?.email || "Anonymous"}</p>
+          <p><span className="text-gray-400">Authority ID:</span> komailali116@gmail.com</p>
+        </div>
+      </div>
+    );
+  }
 
-  const handleAddPhotoUrl = (url: string, index: number) => {
-    if (!url.trim()) return;
-    const updated = [...newPhotos];
-    updated[index] = url.trim();
-    setNewPhotos(updated);
-    setNewPhotoPreviews(prev => ({ ...prev, [index]: url.trim() }));
-  };
+  // --- COMPONENT STATE ---
+  const [activeTab, setActiveTab] = useState<"dashboard" | "users" | "companions" | "payments" | "pricing" | "content" | "logs">("dashboard");
+  const [successMsg, setSuccessMsg] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
 
-  const handleRemovePhoto = (index: number) => {
-    const updated = [...newPhotos];
-    updated[index] = "";
-    setNewPhotos(updated);
-    setNewPhotoPreviews(prev => {
-      const copy = { ...prev };
-      delete copy[index];
-      return copy;
+  // Search & Filters states
+  const [userSearch, setUserSearch] = useState("");
+  const [userCityFilter, setUserCityFilter] = useState("all");
+  const [selectedUserDetail, setSelectedUserDetail] = useState<UserProfile | null>(null);
+
+  const [companionSearch, setCompanionSearch] = useState("");
+  const [companionStatusFilter, setCompanionStatusFilter] = useState("all");
+  const [editingCompanion, setEditingCompanion] = useState<Companion | null>(null);
+
+  const [paymentSearch, setPaymentSearch] = useState("");
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState("Pending");
+  const [selectedPaymentDetail, setSelectedPaymentDetail] = useState<PaymentRequest | null>(null);
+  const [adminReviewNote, setAdminReviewNote] = useState("");
+  const [enlargedScreenshot, setEnlargedScreenshot] = useState<string | null>(null);
+
+  // Pricing Form States (initialized from appSettings)
+  const [silverMultiplier, setSilverMultiplier] = useState(appSettings.silverMultiplier);
+  const [goldMultiplier, setGoldMultiplier] = useState(appSettings.goldMultiplier);
+  const [platinumMultiplier, setPlatinumMultiplier] = useState(appSettings.platinumMultiplier);
+  const [membershipGoldFee, setMembershipGoldFee] = useState(appSettings.membershipGoldFee);
+  const [membershipPlatinumFee, setMembershipPlatinumFee] = useState(appSettings.membershipPlatinumFee);
+  const [customBasePrices, setCustomBasePrices] = useState<Record<string, number>>(() => {
+    const prices: Record<string, number> = {};
+    SERVICES.forEach(s => {
+      prices[s.id] = s.basePrice;
     });
+    return prices;
+  });
+
+  // Content Hub states
+  const [announcementText, setAnnouncementText] = useState(appSettings.announcement);
+  const [bannerTextState, setBannerTextState] = useState(appSettings.bannerText);
+  const [bannerEnabledState, setBannerEnabledState] = useState(appSettings.bannerEnabled);
+
+  // Companion creation uploader states (inherited for admin onboarding)
+  const [newCompName, setNewCompName] = useState("");
+  const [newCompAge, setNewCompAge] = useState(24);
+  const [newCompGender, setNewCompGender] = useState<CompanionGender>(CompanionGender.FEMALE);
+  const [newCompCity, setNewCompCity] = useState<PakistanCity>("Lahore");
+  const [newCompBio, setNewCompBio] = useState("");
+  const [newCompLanguages, setNewCompLanguages] = useState("Urdu, English");
+  const [newCompInterests, setNewCompInterests] = useState("Reading, Coffee, Movies");
+  const [newCompServices, setNewCompServices] = useState<string[]>(["dining", "call", "study"]);
+  const [newCompAvatar, setNewCompAvatar] = useState("");
+  const [newCompTier, setNewCompTier] = useState<"Silver" | "Gold" | "Platinum">("Silver");
+  const [newCompTagline, setNewCompTagline] = useState("");
+  const [newCompPhotos, setNewCompPhotos] = useState<string[]>(["", "", ""]);
+  const [newCompPreviews, setNewCompPreviews] = useState<Record<number, string>>({});
+  const [uploadSlotIdx, setUploadSlotIdx] = useState<number | null>(null);
+
+  const displaySuccess = (msg: string) => {
+    setSuccessMsg(msg);
+    setTimeout(() => setSuccessMsg(""), 4000);
   };
 
-  const handlePortfolioPhotoUpload = async (file: File, slotIndex: number) => {
-    setPhotosError("");
-    setIsPhotoUploading(slotIndex);
+  const displayError = (msg: string) => {
+    setErrorMsg(msg);
+    setTimeout(() => setErrorMsg(""), 4000);
+  };
+
+  // --- STATS COMPILING ---
+  const activeUsersCount = allProfiles.filter(p => p.selectedRole !== "suspended").length;
+  const suspendedUsersCount = allProfiles.filter(p => p.selectedRole === "suspended").length;
+  const pendingRegistrationsCount = companions.filter(c => c.status === CompanionStatus.PENDING).length;
+
+  const pendingPayments = paymentRequests.filter(p => p.status === "Pending");
+  const approvedPayments = paymentRequests.filter(p => p.status === "Approved");
+  const rejectedPayments = paymentRequests.filter(p => p.status === "Rejected");
+
+  const totalCompanions = companions.length;
+  const approvedRevenue = approvedPayments.reduce((sum, p) => sum + p.totalPrice, 0);
+
+  // Revenue by service breakdown
+  const revenueByService = SERVICES.map(s => {
+    const serviceTotal = approvedPayments
+      .filter(p => p.serviceId === s.id)
+      .reduce((sum, p) => sum + p.totalPrice, 0);
+    return { name: s.name, total: serviceTotal, count: approvedPayments.filter(p => p.serviceId === s.id).length };
+  });
+
+  // Handle save global prices & tier settings
+  const handleSavePricingMatrix = async () => {
+    try {
+      // 1. Update SERVICES locally & localStorage
+      const updatedServices = SERVICES.map(s => ({
+        ...s,
+        basePrice: customBasePrices[s.id] || s.basePrice
+      }));
+      if (typeof window !== "undefined") {
+        localStorage.setItem("yarana_services", JSON.stringify(updatedServices));
+      }
+
+      // 2. Save settings to DB Special Row
+      const newSettings = {
+        ...appSettings,
+        silverMultiplier,
+        goldMultiplier,
+        platinumMultiplier,
+        membershipGoldFee,
+        membershipPlatinumFee
+      };
+      await onUpdateSettings(newSettings);
+      displaySuccess("Pricing matrix and service tariffs synchronized successfully across the cloud!");
+    } catch (err: any) {
+      displayError("tariff alignment failed: " + err.message);
+    }
+  };
+
+  // Handle Content Hub Sync
+  const handleSaveContentHub = async () => {
+    try {
+      const newSettings = {
+        ...appSettings,
+        announcement: announcementText,
+        bannerText: bannerTextState,
+        bannerEnabled: bannerEnabledState
+      };
+      await onUpdateSettings(newSettings);
+      displaySuccess("Governance alert hubs and announcement headers dispatched successfully!");
+    } catch (err: any) {
+      displayError("Governance content sync failed: " + err.message);
+    }
+  };
+
+  // Onboard manual companion application via admin creator
+  const handleAdminOnboardCompanion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCompName.trim() || !newCompBio.trim()) {
+      alert("Companion name and biography are required.");
+      return;
+    }
+
+    const companionId = "comp_" + Date.now();
+    const onboardedComp: Companion = {
+      id: companionId,
+      name: newCompName,
+      age: Number(newCompAge),
+      gender: newCompGender,
+      city: newCompCity,
+      avatar: newCompAvatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150",
+      bio: newCompBio,
+      rating: 4.8,
+      reviewsCount: 1,
+      languages: newCompLanguages.split(",").map(l => l.trim()).filter(Boolean),
+      interests: newCompInterests.split(",").map(i => i.trim()).filter(Boolean),
+      services: newCompServices,
+      status: CompanionStatus.APPROVED,
+      isOnline: true,
+      featured: true,
+      pricingTier: newCompTier,
+      photos: newCompPhotos.filter(Boolean),
+      tagline: newCompTagline || undefined
+    };
+
+    onAddNewCompanion(onboardedComp);
+    displaySuccess(`Companion '${newCompName}' has been successfully provisioned and listed!`);
+
+    // Reset Form
+    setNewCompName("");
+    setNewCompBio("");
+    setNewCompAvatar("");
+    setNewCompTagline("");
+    setNewCompPhotos(["", "", ""]);
+    setNewCompPreviews({});
+  };
+
+  const handleCompanionPhotoUpload = async (file: File, slotIdx: number) => {
+    setUploadSlotIdx(slotIdx);
     try {
       const { data: sessionData } = await supabase.auth.getSession();
-      const uid = sessionData?.session?.user?.id || "anonymous";
+      const uid = sessionData?.session?.user?.id || "admin";
 
       const uuid = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
-      const extension = file.name.split('.').pop() || 'png';
-      const filePath = `${uid}/companions/${companionId}/portfolio_${slotIndex}_${uuid}.${extension}`;
+      const filePath = `companions/${uid}/portfolio_${slotIdx}_${uuid}.png`;
 
       const { error } = await supabase.storage
         .from("app-files")
         .upload(filePath, file, { cacheControl: "3600", upsert: true });
 
-      if (error) {
-        setPhotosError("Failed to upload portfolio photo: " + error.message);
-        setIsPhotoUploading(null);
-        return;
+      if (error) throw error;
+
+      // Create signed URL for instant display
+      const { data: signedData, error: signedError } = await supabase.storage
+        .from("app-files")
+        .createSignedUrl(filePath, 3600);
+
+      if (!signedError && signedData) {
+        setNewCompPreviews(prev => ({ ...prev, [slotIdx]: signedData.signedUrl }));
+        setNewCompPhotos(prev => {
+          const updated = [...prev];
+          updated[slotIdx] = filePath;
+          return updated;
+        });
       }
-
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === "string") {
-          const updated = [...newPhotos];
-          updated[slotIndex] = filePath;
-          setNewPhotos(updated);
-          setNewPhotoPreviews(prev => ({ ...prev, [slotIndex]: reader.result as string }));
-          setIsPhotoUploading(null);
-        }
-      };
-      reader.readAsDataURL(file);
     } catch (err: any) {
-      setPhotosError("Upload error: " + (err.message || err));
-      setIsPhotoUploading(null);
-    }
-  };
-
-  const pendingCompanions = companions.filter(c => c.status === CompanionStatus.PENDING);
-  const approvedCompanions = companions.filter(c => c.status === CompanionStatus.APPROVED);
-
-  // Statistics
-  const totalPKREarned = bookings.filter(b => b.status === "paid" || b.status === "completed").reduce((sum, b) => sum + b.totalPrice, 0);
-
-  const handleCreateCompanion = (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormSuccess("");
-
-    if (!newCompanionName.trim() || !newBio.trim()) {
-      alert("Please fill in companion name and biography.");
-      return;
-    }
-
-    const randomID = companionId;
-    const parsedLanguages = newLanguages.split(",").map(l => l.trim()).filter(Boolean);
-    const parsedInterests = newInterests.split(",").map(i => i.trim()).filter(Boolean);
-
-    // Dynamic avatar selection based on gender
-    const defaultAvatars = {
-      [CompanionGender.FEMALE]: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=400",
-      [CompanionGender.MALE]: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&q=80&w=400",
-      [CompanionGender.OTHER]: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=400"
-    };
-
-    const newComp: Companion = {
-      id: randomID,
-      name: newCompanionName,
-      age: Number(newAge),
-      gender: newGender,
-      city: newCity,
-      avatar: newAvatarUrl.trim() || defaultAvatars[newGender],
-      bio: newBio,
-      rating: 0.0,
-      reviewsCount: 0,
-      languages: parsedLanguages,
-      interests: parsedInterests,
-      services: newServices,
-      status: CompanionStatus.APPROVED, // Admins directly approve their own creations!
-      isOnline: true,
-      featured: newFeatured,
-      tagline: newTagline.trim() || undefined,
-      pricingTier: newPricingTier,
-      photos: newPhotos.filter(Boolean).length > 0 ? newPhotos.filter(Boolean) : undefined
-    };
-
-    onAddNewCompanion(newComp);
-    setFormSuccess(`Companion profile for '${newCompanionName}' successfully provisioned and approved with ${newPhotos.filter(Boolean).length} portfolio pictures!`);
-
-    // Reset Form
-    setNewCompanionName("");
-    setNewBio("");
-    setNewLanguages("Urdu, English");
-    setNewInterests("Reading, Movies, Coffee");
-    setNewServices(["dining", "call", "study"]);
-    setNewAvatarUrl("");
-    setAvatarPreview("");
-    setCompanionId("comp_" + Date.now());
-    setSelectedPresetIdx(-1);
-    setNewFeatured(false);
-    setNewTagline("");
-    setNewPricingTier("Silver");
-    setNewPhotos(["", "", ""]);
-    setNewPhotoPreviews({});
-    setPhotosError("");
-  };
-
-  const handleServiceToggle = (serviceId: string) => {
-    if (newServices.includes(serviceId)) {
-      setNewServices(newServices.filter(id => id !== serviceId));
-    } else {
-      setNewServices([...newServices, serviceId]);
+      console.error("Companion photo upload failed:", err);
+      alert("Onboarding picture upload failed: " + err.message);
+    } finally {
+      setUploadSlotIdx(null);
     }
   };
 
   return (
-    <div className="space-y-6 text-[#2D2D2D]" id="admin-panel-container">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 text-left" id="admin-governance-panel">
       
-      {/* Admin Title / Status Banner */}
-      <div className="bg-white border border-[#E5E1D8] p-5 rounded-3xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-full bg-[#1A1C20] text-[#D4AF37] shadow-sm">
-            <Shield className="w-5 h-5" />
-          </div>
-          <div>
-            <h2 className="text-xl font-serif font-bold text-[#1A1A1A]">Governance Center</h2>
-            <p className="text-xs text-gray-500 mt-0.5 font-light">Administrative dashboard for companion registration, application approvals, and audit logs.</p>
-          </div>
-        </div>
-
-        {/* Dynamic administrative stats - Bento style */}
-        <div className="grid grid-cols-3 gap-3 text-left">
-          <div className="px-3.5 py-2 bg-[#FFF4E5] rounded-2xl border border-[#FFE0B2]">
-            <p className="text-[9px] text-orange-800 uppercase font-mono tracking-wider font-semibold">Earned</p>
-            <p className="text-sm font-black text-orange-600 mt-0.5">{totalPKREarned.toLocaleString()} PKR</p>
-          </div>
-          <div className="px-3.5 py-2 bg-[#E8F5E9] rounded-2xl border border-[#C8E6C9]">
-            <p className="text-[9px] text-green-800 uppercase font-mono tracking-wider font-semibold">Hosts</p>
-            <p className="text-sm font-black text-green-700 mt-0.5">{approvedCompanions.length}</p>
-          </div>
-          <div className="px-3.5 py-2 bg-[#E1F5FE] rounded-2xl border border-[#B3E5FC]">
-            <p className="text-[9px] text-blue-800 uppercase font-mono tracking-wider font-semibold">Pending</p>
-            <p className="text-sm font-black text-blue-700 mt-0.5">{pendingCompanions.length}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Admin Inner Navigation Tabs */}
-      <div className="flex border-b border-[#E5E1D8] gap-2 overflow-x-auto pb-1" id="admin-submenu-tabs">
-        <button
-          onClick={() => { setActiveTab("listings"); setFormSuccess(""); }}
-          className={`px-4 py-2 text-xs font-bold rounded-full uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
-            activeTab === "listings" ? "bg-[#1A1C20] text-[#D4AF37] shadow-sm" : "text-gray-500 hover:text-black bg-[#F3F0E9]/50"
-          }`}
-          id="admin-tab-listings"
-        >
-          <Users className="w-3.5 h-3.5" />
-          <span>Active Hosts ({approvedCompanions.length})</span>
-        </button>
-        
-        <button
-          onClick={() => { setActiveTab("pending"); setFormSuccess(""); }}
-          className={`px-4 py-2 text-xs font-bold rounded-full uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 relative ${
-            activeTab === "pending" ? "bg-[#1A1C20] text-[#D4AF37] shadow-sm" : "text-gray-500 hover:text-black bg-[#F3F0E9]/50"
-          }`}
-          id="admin-tab-pending"
-        >
-          <ShieldAlert className="w-3.5 h-3.5" />
-          <span>Applications</span>
-          {pendingCompanions.length > 0 && (
-            <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">
-              {pendingCompanions.length}
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => { setActiveTab("add_new"); setFormSuccess(""); }}
-          className={`px-4 py-2 text-xs font-bold rounded-full uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
-            activeTab === "add_new" ? "bg-[#1A1C20] text-[#D4AF37] shadow-sm" : "text-gray-500 hover:text-black bg-[#F3F0E9]/50"
-          }`}
-          id="admin-tab-add"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Register Host</span>
-        </button>
-
-        <button
-          onClick={() => { setActiveTab("bookings_log"); setFormSuccess(""); }}
-          className={`px-4 py-2 text-xs font-bold rounded-full uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
-            activeTab === "bookings_log" ? "bg-[#1A1C20] text-[#D4AF37] shadow-sm" : "text-gray-500 hover:text-black bg-[#F3F0E9]/50"
-          }`}
-          id="admin-tab-logs"
-        >
-          <ListFilter className="w-3.5 h-3.5" />
-          <span>Audit Logs ({bookings.length})</span>
-        </button>
-
-        <button
-          onClick={() => { setActiveTab("pricing"); setFormSuccess(""); setPricingSuccess(""); }}
-          className={`px-4 py-2 text-xs font-bold rounded-full uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
-            activeTab === "pricing" ? "bg-[#1A1C20] text-[#D4AF37] shadow-sm" : "text-gray-500 hover:text-black bg-[#F3F0E9]/50"
-          }`}
-          id="admin-tab-pricing"
-        >
-          <Coins className="w-3.5 h-3.5" />
-          <span>Global Pricing</span>
-        </button>
-
-        <button
-          onClick={() => { setActiveTab("payments"); setFormSuccess(""); }}
-          className={`px-4 py-2 text-xs font-bold rounded-full uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 relative ${
-            activeTab === "payments" ? "bg-[#1A1C20] text-[#D4AF37] shadow-sm" : "text-gray-500 hover:text-black bg-[#F3F0E9]/50"
-          }`}
-          id="admin-tab-payments"
-        >
-          <CreditCard className="w-3.5 h-3.5" />
-          <span>Payment Audits</span>
-          {paymentRequests.filter(r => r.status === "Pending").length > 0 && (
-            <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-bold text-white">
-              {paymentRequests.filter(r => r.status === "Pending").length}
-            </span>
-          )}
-        </button>
-      </div>
-
-      {/* Tab Contents */}
-
-      {/* Active Companions Panel */}
-      {activeTab === "listings" && (
-        <div className="bg-white border border-[#E5E1D8] rounded-3xl p-6 shadow-sm space-y-4" id="admin-active-companions-list">
-          <div className="border-b border-[#E5E1D8]/60 pb-3">
-            <h3 className="text-base font-bold text-[#1A1A1A]">Approved Companions</h3>
-            <p className="text-xs text-gray-400">Toggle current online availability or dissolve active host accounts here.</p>
-          </div>
-
-          {approvedCompanions.length === 0 ? (
-            <p className="text-xs text-gray-400 italic py-6">No approved companions registered in the database.</p>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {approvedCompanions.map(comp => (
-                <div key={comp.id} className="p-4 rounded-2xl bg-[#F3F0E9]/20 border border-[#E5E1D8]/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <img
-                      src={comp.avatar}
-                      alt={comp.name}
-                      referrerPolicy="no-referrer"
-                      className="w-12 h-12 rounded-full object-cover border border-[#E5E1D8]"
-                    />
-                    <div className="text-left">
-                      <p className="text-xs font-bold text-[#1A1A1A] leading-tight flex items-center gap-1.5 flex-wrap">
-                        <span>{comp.name}</span>
-                        <span className="text-gray-400 font-mono text-[10px]">({comp.age})</span>
-                      </p>
-                      <p className="text-[10px] text-gray-400 font-mono mt-0.5">{comp.city} &bull; {comp.gender}</p>
-                      
-                      <div className="flex items-center gap-1 mt-1 text-[10px] text-[#D4AF37] font-bold">
-                        <Star className="w-3 h-3 fill-[#D4AF37] stroke-none" />
-                        <span>{comp.rating > 0 ? comp.rating.toFixed(1) : "NEW"}</span>
-                        <span className="text-gray-400">({comp.reviewsCount} reviews)</span>
-                      </div>
-
-                      {/* Tier Label badge */}
-                      <div className="mt-1.5 flex items-center gap-1">
-                        <span className="text-[9px] text-gray-400 uppercase tracking-wider font-bold">Category:</span>
-                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${
-                          comp.pricingTier === "Gold"
-                            ? "bg-amber-100 text-amber-800 border border-amber-200"
-                            : comp.pricingTier === "Platinum"
-                            ? "bg-indigo-100 text-indigo-800 border border-indigo-200"
-                            : "bg-slate-100 text-slate-700 border border-slate-250"
-                        }`}>
-                          {comp.pricingTier || "Silver"}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Actions tier selection, toggle online, remove */}
-                  <div className="flex flex-wrap items-center gap-2.5 justify-between sm:justify-end border-t sm:border-0 pt-2 sm:pt-0 border-[#E5E1D8]/30">
-                    <div className="flex items-center gap-1">
-                      {(["Silver", "Gold", "Platinum"] as const).map(tier => (
-                        <button
-                          key={tier}
-                          onClick={() => onUpdateCompanionTier && onUpdateCompanionTier(comp.id, tier)}
-                          className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-all cursor-pointer ${
-                            (comp.pricingTier || "Silver") === tier
-                              ? tier === "Gold"
-                                ? "bg-amber-500 border-amber-600 text-white shadow-sm"
-                                : tier === "Platinum"
-                                ? "bg-indigo-600 border-indigo-750 text-white shadow-sm"
-                                : "bg-slate-700 border-slate-800 text-white shadow-sm"
-                              : "bg-white hover:bg-gray-50 text-gray-500 border-gray-200"
-                          }`}
-                          id={`btn-tier-${comp.id}-${tier}`}
-                        >
-                          {tier}
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="flex items-center gap-1">
-                      {/* Toggle availability */}
-                      <button
-                        onClick={() => onToggleOnline(comp.id)}
-                        className="p-1 transition-all cursor-pointer"
-                        title="Toggle Host Online Status"
-                      >
-                        {comp.isOnline ? (
-                          <ToggleRight className="w-7 h-7 text-green-500" />
-                        ) : (
-                          <ToggleLeft className="w-7 h-7 text-gray-300" />
-                        )}
-                      </button>
-
-                      {/* Delete account */}
-                      <button
-                        onClick={() => onRemoveCompanion(comp.id)}
-                        className="p-1.5 bg-red-50 hover:bg-red-100 border border-red-100 text-red-600 rounded-lg cursor-pointer transition-all"
-                        title="Dissolve Companion Account"
-                        id={`admin-btn-delete-${comp.id}`}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
+      {/* 1. Left Sidebar Navigation Column */}
+      <div className="lg:col-span-3 space-y-4">
+        <div className="bg-white border border-[#E5E1D8] p-5 rounded-3xl space-y-4 shadow-sm">
+          <div className="flex items-center gap-2.5 px-1 py-1.5 border-b border-[#E5E1D8]">
+            <Shield className="w-5 h-5 text-[#D4AF37]" />
+            <div>
+              <h2 className="text-sm font-serif font-black text-[#1A1A1A] tracking-tight leading-none">Owner Registry</h2>
+              <p className="text-[10px] text-gray-400 mt-1 uppercase tracking-wider font-semibold font-mono">komailali116@gmail.com</p>
             </div>
-          )}
-        </div>
-      )}
-
-      {/* Pending Companions Panel */}
-      {activeTab === "pending" && (
-        <div className="bg-white border border-[#E5E1D8] rounded-3xl p-6 shadow-sm space-y-4" id="admin-pending-companions-list">
-          <div className="border-b border-[#E5E1D8]/60 pb-3">
-            <h3 className="text-base font-bold text-[#1A1A1A]">Pending Host Registrations</h3>
-            <p className="text-xs text-gray-400">Review self-submitted companion profiles before listing them live on the marketplace.</p>
           </div>
 
-          {pendingCompanions.length === 0 ? (
-            <div className="py-12 text-center text-gray-400 flex flex-col items-center">
-              <Check className="w-8 h-8 text-green-600 bg-green-50 p-1.5 rounded-full mb-2" />
-              <p className="text-xs">All outstanding registrations have been fully actioned!</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {pendingCompanions.map(comp => (
-                <div key={comp.id} className="p-4 rounded-2xl bg-[#F3F0E9]/20 border border-[#E5E1D8]/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="flex items-start gap-3.5">
-                    <img
-                      src={comp.avatar}
-                      alt={comp.name}
-                      referrerPolicy="no-referrer"
-                      className="w-14 h-14 rounded-2xl object-cover border border-[#E5E1D8]"
-                    />
-                    <div className="text-left space-y-1">
-                      <p className="text-sm font-bold text-[#1A1A1A] leading-tight">{comp.name} <span className="text-gray-400 font-mono">({comp.age})</span></p>
-                      <p className="text-[10px] text-gray-400 font-mono leading-none">{comp.city} &bull; {comp.gender}</p>
-                      
-                      {/* Secure identity check details */}
-                      <div className="flex flex-wrap gap-2 py-0.5">
-                        {comp.cnic && (
-                          <span className="text-[10px] bg-[#FFF4E5] border border-[#FFE0B2] text-[#E65100] px-2 py-0.5 rounded-lg font-mono font-bold" id={`pending-cnic-${comp.id}`}>
-                            CNIC: {comp.cnic}
-                          </span>
-                        )}
-                        {comp.mobile && (
-                          <span className="text-[10px] bg-[#E8F5E9] border border-[#C8E6C9] text-green-800 px-2 py-0.5 rounded-lg font-bold" id={`pending-mobile-${comp.id}`}>
-                            Mobile: {comp.mobile}
-                          </span>
-                        )}
-                      </div>
-
-                      {comp.interests && comp.interests.length > 0 && (
-                        <p className="text-[11px] text-gray-600 font-medium">
-                          <span className="text-gray-400">Interests:</span> {comp.interests.join(", ")}
-                        </p>
-                      )}
-
-                      <p className="text-xs text-gray-500 leading-relaxed max-w-md">{comp.bio}</p>
-                      
-                      {/* Services listed */}
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {comp.services.map(sid => (
-                          <span key={sid} className="text-[9px] bg-white border border-[#E5E1D8] text-gray-600 px-2 py-0.5 rounded-lg">
-                            {sid}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Select Pricing Tier & Accept/Reject actions */}
-                  <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3 border-t md:border-t-0 pt-3 md:pt-0 border-[#E5E1D8]/60 justify-end w-full md:w-auto">
-                    {/* Tier selector for approval */}
-                    <div className="flex items-center gap-1">
-                      <span className="text-[10px] text-gray-400 font-bold mr-1 uppercase">Assign Category:</span>
-                      {(["Silver", "Gold", "Platinum"] as const).map(tier => (
-                        <button
-                          key={tier}
-                          type="button"
-                          onClick={() => setPendingTiers(prev => ({ ...prev, [comp.id]: tier }))}
-                          className={`px-2.5 py-1 rounded text-[10px] font-bold border transition-all cursor-pointer ${
-                            (pendingTiers[comp.id] || "Silver") === tier
-                              ? tier === "Gold"
-                                ? "bg-amber-500 border-amber-600 text-white shadow-sm"
-                                : tier === "Platinum"
-                                ? "bg-indigo-600 border-indigo-700 text-white shadow-sm"
-                                : "bg-slate-700 border-slate-800 text-white shadow-sm"
-                              : "bg-white hover:bg-gray-50 text-gray-500 border-gray-200"
-                          }`}
-                        >
-                          {tier}
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => onRejectCompanion(comp.id)}
-                        className="px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 rounded-xl text-xs font-bold uppercase transition-all cursor-pointer flex items-center gap-1"
-                        id={`admin-reject-btn-${comp.id}`}
-                      >
-                        <X className="w-3.5 h-3.5" />
-                        Reject
-                      </button>
-                      <button
-                        onClick={() => onApproveCompanion(comp.id, pendingTiers[comp.id] || "Silver")}
-                        className="px-4 py-2 bg-[#1A1C20] hover:bg-[#D4AF37] text-white hover:text-black rounded-xl text-xs font-bold uppercase transition-all cursor-pointer flex items-center gap-1 shadow-sm"
-                        id={`admin-approve-btn-${comp.id}`}
-                      >
-                        <Check className="w-3.5 h-3.5" />
-                        Approve Host
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Register Host Panel */}
-      {activeTab === "add_new" && (
-        <div className="bg-white border border-[#E5E1D8] rounded-3xl p-6 shadow-sm space-y-4" id="admin-add-companion-panel">
-          <div className="border-b border-[#E5E1D8]/60 pb-3">
-            <h3 className="text-base font-bold text-[#1A1A1A]">Register a Companion</h3>
-            <p className="text-xs text-gray-400">Instantly provision and verify new companionship hosts to the marketplace catalog.</p>
-          </div>
-
-          {formSuccess && (
-            <div className="p-3.5 bg-green-50 border border-green-100 rounded-2xl text-green-800 text-xs font-medium flex items-center gap-2 shadow-sm">
-              <Sparkles className="w-4 h-4 text-[#D4AF37]" />
-              <span>{formSuccess}</span>
-            </div>
-          )}
-
-          <form onSubmit={handleCreateCompanion} className="space-y-4 text-xs sm:text-sm text-left">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Companion Full Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Zara Ahmed"
-                  value={newCompanionName}
-                  onChange={(e) => setNewCompanionName(e.target.value)}
-                  className="w-full bg-[#F3F0E9]/30 border border-[#E5E1D8] text-gray-800 rounded-xl p-2.5 text-xs focus:outline-none focus:border-[#D4AF37]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Age</label>
-                <input
-                  type="number"
-                  min={18}
-                  max={50}
-                  required
-                  value={newAge}
-                  onChange={(e) => setNewAge(Number(e.target.value))}
-                  className="w-full bg-[#F3F0E9]/30 border border-[#E5E1D8] text-gray-800 rounded-xl p-2.5 text-xs focus:outline-none focus:border-[#D4AF37]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">City</label>
-                <select
-                  value={newCity}
-                  onChange={(e) => setNewCity(e.target.value as any)}
-                  className="w-full bg-[#F3F0E9]/30 border border-[#E5E1D8] text-gray-700 rounded-xl p-2.5 text-xs focus:outline-none focus:border-[#D4AF37] cursor-pointer"
+          <div className="flex flex-col gap-1">
+            {[
+              { id: "dashboard", label: "Dashboard Overview", icon: Activity },
+              { id: "users", label: "User Governance", icon: Users },
+              { id: "companions", label: "Companions Catalog", icon: Award },
+              { id: "payments", label: "Payment Audits", icon: CreditCard },
+              { id: "pricing", label: "Pricing Matrices", icon: Coins },
+              { id: "content", label: "Content Hub", icon: Settings },
+              { id: "logs", label: "Governance Logs", icon: FileText }
+            ].map(tab => {
+              const Icon = tab.icon;
+              const isSelected = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as any)}
+                  className={`w-full py-3 px-3.5 rounded-xl text-xs font-bold transition-all flex items-center gap-3 cursor-pointer ${
+                    isSelected
+                      ? "bg-[#1A1C20] text-white shadow-sm"
+                      : "text-gray-500 hover:bg-gray-50 hover:text-black"
+                  }`}
                 >
-                  {PAKISTAN_CITIES.map(city => (
-                    <option key={city} value={city}>{city}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
+                  <Icon className={`w-4 h-4 ${isSelected ? "text-[#D4AF37]" : ""}`} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Languages (comma separated)</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Urdu, English, Punjabi"
-                  value={newLanguages}
-                  onChange={(e) => setNewLanguages(e.target.value)}
-                  className="w-full bg-[#F3F0E9]/30 border border-[#E5E1D8] text-gray-800 rounded-xl p-2.5 text-xs focus:outline-none focus:border-[#D4AF37]"
-                />
-              </div>
+        {/* Global Notifications Panel */}
+        {successMsg && (
+          <div className="bg-green-50 border border-green-150 p-4 rounded-2xl flex gap-2 items-center text-xs text-green-700 animate-fade-in shadow-sm">
+            <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+            <span>{successMsg}</span>
+          </div>
+        )}
+        {errorMsg && (
+          <div className="bg-red-50 border border-red-150 p-4 rounded-2xl flex gap-2 items-center text-xs text-red-700 animate-fade-in shadow-sm">
+            <ShieldAlert className="w-4 h-4 text-red-600 shrink-0" />
+            <span>{errorMsg}</span>
+          </div>
+        )}
+      </div>
 
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Interests &amp; Hobbies (comma separated)</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Reading, Coffee, Music, Psychology"
-                  value={newInterests}
-                  onChange={(e) => setNewInterests(e.target.value)}
-                  className="w-full bg-[#F3F0E9]/30 border border-[#E5E1D8] text-gray-800 rounded-xl p-2.5 text-xs focus:outline-none focus:border-[#D4AF37]"
-                />
-              </div>
-            </div>
+      {/* 2. Main Administration Workspace Stage */}
+      <div className="lg:col-span-9 space-y-6">
 
-             <div>
-              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Companion Gender</label>
-              <div className="flex gap-4 pt-1">
-                {Object.values(CompanionGender).map(g => (
-                  <label key={g} className="inline-flex items-center gap-1.5 text-gray-700 text-xs cursor-pointer select-none">
-                    <input
-                      type="radio"
-                      name="gender"
-                      checked={newGender === g}
-                      onChange={() => setNewGender(g)}
-                      className="accent-[#D4AF37]"
-                    />
-                    <span>{g}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {/* Custom Photo URL or Direct Photo Picker (and File Upload) */}
-            <div className="space-y-3 bg-[#F9F8F6] border border-[#E5E1D8] p-4 rounded-2xl" id="admin-photo-selector-section">
-              <div>
-                <label className="block text-[10px] font-bold text-[#1A1A1A] uppercase tracking-widest">Companion Profile Photo</label>
-                <p className="text-[11px] text-gray-500 font-light mt-0.5">Choose a direct photo from our preset library, paste a custom URL, or upload your own file directly.</p>
-              </div>
-
-              {/* Grid of Clickable Presets (Direct Photos) */}
-              <div className="space-y-1.5">
-                <span className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider">Option 1: Direct Photo Presets</span>
-                <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
-                  {PRESET_AVATARS.map((preset, idx) => (
-                    <button
-                      type="button"
-                      key={idx}
-                      onClick={() => {
-                        setNewAvatarUrl(preset.url);
-                        setSelectedPresetIdx(idx);
-                      }}
-                      className={`relative aspect-square rounded-xl overflow-hidden border-2 cursor-pointer transition-all ${
-                        selectedPresetIdx === idx
-                          ? "border-[#D4AF37] ring-2 ring-[#D4AF37]/30 scale-[1.03]"
-                          : "border-[#E5E1D8] hover:border-gray-400"
-                      }`}
-                    >
-                      <img
-                        src={preset.url}
-                        alt={preset.label}
-                        className="w-full h-full object-cover"
-                      />
-                      {selectedPresetIdx === idx && (
-                        <div className="absolute inset-0 bg-[#D4AF37]/10 flex items-center justify-center">
-                          <Check className="w-4 h-4 text-white bg-black/50 rounded-full p-0.5" />
-                        </div>
-                      )}
-                    </button>
-                  ))}
+        {/* TAB 1: DASHBOARD OVERVIEW */}
+        {activeTab === "dashboard" && (
+          <div className="space-y-6 animate-fade-in">
+            {/* Metrics Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              
+              <div className="bg-white border border-[#E5E1D8] p-5 rounded-2xl shadow-sm space-y-2">
+                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest font-mono">Total Platform Revenue</p>
+                <div className="flex items-baseline justify-between gap-2">
+                  <h3 className="text-xl sm:text-2xl font-serif font-black text-green-700">{approvedRevenue.toLocaleString()}</h3>
+                  <span className="text-[10px] font-mono text-gray-400 font-bold uppercase">PKR</span>
+                </div>
+                <div className="h-1 bg-green-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-green-500 w-3/4" />
                 </div>
               </div>
 
-              {/* Paste custom URL or Direct File upload */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-                <div>
-                  <span className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Option 2: Direct File Upload</span>
-                  <label className="flex items-center justify-center gap-2 p-2 border border-dashed border-[#E5E1D8] hover:border-[#D4AF37] rounded-xl bg-white cursor-pointer transition-all hover:bg-gray-50 text-xs text-gray-600 font-semibold">
-                    <Upload className={`w-4 h-4 text-[#D4AF37] ${isUploading ? "animate-bounce" : ""}`} />
-                    <span>{isUploading ? "Uploading..." : "Upload Image File"}</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      disabled={isUploading}
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          setIsUploading(true);
-                          setUploadError("");
-                          
-                          try {
-                            const { data: sessionData } = await supabase.auth.getSession();
-                            const uid = sessionData?.session?.user?.id || "anonymous";
-                            
-                            // Admin has no limits - bypass limit check
-                            
-                            const uuid = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
-                            const extension = file.name.split('.').pop() || 'png';
-                            const filePath = `${uid}/companions/${companionId}/${uuid}.${extension}`;
-                            
-                            const { error } = await supabase.storage
-                              .from("app-files")
-                              .upload(filePath, file, { cacheControl: "3600", upsert: true });
-                              
-                            if (error) {
-                              setUploadError("Failed to upload image: " + error.message);
-                              setIsUploading(false);
-                              return;
-                            }
-                            
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              if (typeof reader.result === "string") {
-                                setAvatarPreview(reader.result);
-                                setNewAvatarUrl(filePath);
-                                setSelectedPresetIdx(-2);
-                                setIsUploading(false);
-                              }
-                            };
-                            reader.readAsDataURL(file);
-                          } catch (err: any) {
-                            setUploadError("Upload error: " + (err.message || err));
-                            setIsUploading(false);
-                          }
-                        }
-                      }}
-                    />
-                  </label>
-                  {uploadError && (
-                    <p className="text-red-500 text-[10px] mt-1 font-semibold">{uploadError}</p>
+              <div className="bg-white border border-[#E5E1D8] p-5 rounded-2xl shadow-sm space-y-2">
+                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest font-mono">Active Members</p>
+                <div className="flex items-baseline justify-between gap-2">
+                  <h3 className="text-xl sm:text-2xl font-serif font-black text-gray-900">{activeUsersCount}</h3>
+                  <span className="text-[9px] font-bold text-green-600 bg-green-50 border border-green-150 px-1.5 py-0.5 rounded">+{suspendedUsersCount} suspended</span>
+                </div>
+                <div className="h-1 bg-blue-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-blue-500 w-4/5" />
+                </div>
+              </div>
+
+              <div className="bg-white border border-[#E5E1D8] p-5 rounded-2xl shadow-sm space-y-2">
+                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest font-mono">Companion Onboarded</p>
+                <div className="flex items-baseline justify-between gap-2">
+                  <h3 className="text-xl sm:text-2xl font-serif font-black text-gray-900">{totalCompanions}</h3>
+                  {pendingRegistrationsCount > 0 && (
+                    <span className="text-[9px] font-bold text-amber-600 bg-amber-50 border border-amber-150 px-1.5 py-0.5 rounded animate-pulse">{pendingRegistrationsCount} pending</span>
                   )}
                 </div>
-
-                <div>
-                  <span className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Option 3: Paste Custom Photo URL</span>
-                  <input
-                    type="url"
-                    placeholder="e.g. https://images.unsplash.com/photo-..."
-                    value={selectedPresetIdx >= 0 ? "" : (newAvatarUrl.includes("/") && !newAvatarUrl.startsWith("http") ? "" : newAvatarUrl)}
-                    onChange={(e) => {
-                      setNewAvatarUrl(e.target.value);
-                      setAvatarPreview("");
-                      setSelectedPresetIdx(-1); // custom URL
-                    }}
-                    className="w-full bg-white border border-[#E5E1D8] text-gray-800 rounded-xl p-2.5 text-xs focus:outline-none focus:border-[#D4AF37]"
-                  />
+                <div className="h-1 bg-amber-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-[#D4AF37] w-2/3" />
                 </div>
               </div>
 
-              {/* Live Preview of Selected Photo */}
-              {newAvatarUrl && (
-                <div className="flex items-center gap-3 bg-white p-2.5 rounded-xl border border-dashed border-[#E5E1D8] w-fit mt-1 shadow-sm">
-                  <img
-                    src={avatarPreview || newAvatarUrl}
-                    alt="Preview"
-                    className="w-10 h-10 rounded-full object-cover border border-[#E5E1D8]"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=400";
-                    }}
-                  />
-                  <div>
-                    <p className="text-[10px] font-bold text-[#1A1A1A]">Photo Assigned Successfully</p>
-                    <p className="text-[9px] text-gray-400 font-mono truncate max-w-[240px]">
-                      {avatarPreview ? "Direct Uploaded Image (Base64)" : (newAvatarUrl.includes("/") && !newAvatarUrl.startsWith("http") ? "Storage path: " + newAvatarUrl : newAvatarUrl)}
-                    </p>
-                  </div>
+              <div className="bg-white border border-[#E5E1D8] p-5 rounded-2xl shadow-sm space-y-2">
+                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest font-mono">Unresolved Transactions</p>
+                <div className="flex items-baseline justify-between gap-2">
+                  <h3 className={`text-xl sm:text-2xl font-serif font-black ${pendingPayments.length > 0 ? "text-amber-600" : "text-gray-900"}`}>{pendingPayments.length}</h3>
+                  <span className="text-[9px] font-mono text-gray-400 uppercase font-bold">Awaiting verification</span>
                 </div>
-              )}
+                <div className="h-1 bg-orange-100 rounded-full overflow-hidden">
+                  <div className={`h-full ${pendingPayments.length > 0 ? "bg-amber-500" : "bg-gray-300"} w-1/2`} />
+                </div>
+              </div>
+
             </div>
 
-            {/* Portfolio Photos Portfolio */}
-            <div className="bg-[#F3F0E9]/10 border border-[#E5E1D8] p-5 rounded-2xl space-y-4 text-left">
-              <div className="flex justify-between items-center">
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 flex items-center gap-1.5">
-                    <Camera className="w-4 h-4 text-[#D4AF37]" />
-                    <span>Portfolio Photos (2-3 Pics)</span>
-                  </label>
-                  <p className="text-[10px] text-gray-400">Add 2 to 3 beautiful additional pictures of this companion to display in their profile portfolio.</p>
-                </div>
-                <div className="text-[9px] font-bold text-[#D4AF37] uppercase bg-[#FFF4E5] border border-[#FFE0B2] px-2.5 py-1 rounded-full">
-                  {newPhotos.filter(Boolean).length} of 3 Slots Filled
-                </div>
+            {/* Quick Action Controls */}
+            <div className="bg-white border border-[#E5E1D8] p-6 rounded-3xl space-y-4 shadow-sm">
+              <h3 className="text-sm font-serif font-black text-[#1A1A1A] tracking-tight">Governance Operations Hub</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+                <button
+                  onClick={() => setActiveTab("users")}
+                  className="p-3.5 bg-gray-50 hover:bg-[#F3F0E9]/35 border border-[#E5E1D8] rounded-2xl text-center space-y-1.5 cursor-pointer hover:border-[#D4AF37] transition-all"
+                >
+                  <Users className="w-5 h-5 text-gray-600 mx-auto" />
+                  <p className="text-[10px] font-bold text-[#1A1A1A]">Manage Accounts</p>
+                </button>
+                <button
+                  onClick={() => setActiveTab("payments")}
+                  className="p-3.5 bg-gray-50 hover:bg-[#F3F0E9]/35 border border-[#E5E1D8] rounded-2xl text-center space-y-1.5 cursor-pointer hover:border-[#D4AF37] transition-all"
+                >
+                  <CreditCard className="w-5 h-5 text-amber-600 mx-auto" />
+                  <p className="text-[10px] font-bold text-[#1A1A1A]">Verify Payments</p>
+                </button>
+                <button
+                  onClick={() => setActiveTab("pricing")}
+                  className="p-3.5 bg-gray-50 hover:bg-[#F3F0E9]/35 border border-[#E5E1D8] rounded-2xl text-center space-y-1.5 cursor-pointer hover:border-[#D4AF37] transition-all"
+                >
+                  <Coins className="w-5 h-5 text-green-600 mx-auto" />
+                  <p className="text-[10px] font-bold text-[#1A1A1A]">Adjust Tariffs</p>
+                </button>
+                <button
+                  onClick={() => setActiveTab("content")}
+                  className="p-3.5 bg-gray-50 hover:bg-[#F3F0E9]/35 border border-[#E5E1D8] rounded-2xl text-center space-y-1.5 cursor-pointer hover:border-[#D4AF37] transition-all"
+                >
+                  <Settings className="w-5 h-5 text-indigo-600 mx-auto" />
+                  <p className="text-[10px] font-bold text-[#1A1A1A]">System Banners</p>
+                </button>
               </div>
+            </div>
 
-              {photosError && (
-                <div className="p-2.5 bg-red-50 border border-red-100 rounded-xl text-red-700 text-xs font-semibold flex items-center gap-2">
-                  <ShieldAlert className="w-4 h-4 text-red-600 shrink-0" />
-                  <span>{photosError}</span>
+            {/* Custom SVG popularity and statistics viz */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              
+              <div className="bg-white border border-[#E5E1D8] p-6 rounded-3xl space-y-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-serif font-black text-gray-900 uppercase tracking-widest font-mono">Tariff Category Performance</h4>
+                  <span className="text-[9px] font-bold text-gray-400 font-mono">REVENUE IN PKR</span>
                 </div>
-              )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {[0, 1, 2].map((idx) => {
-                  const photo = newPhotoPreviews[idx] || newPhotos[idx];
-                  const isUploadingThisSlot = isPhotoUploading === idx;
-
-                  return (
-                    <div key={idx} className="relative aspect-square rounded-xl bg-white border border-dashed border-[#E5E1D8] overflow-hidden flex flex-col items-center justify-center p-3 hover:border-[#D4AF37]/50 transition-all">
-                      {photo ? (
-                        <>
-                          <img
-                            src={photo}
-                            alt={`Portfolio Preview ${idx + 1}`}
-                            className="w-full h-full object-cover rounded-lg"
-                            referrerPolicy="no-referrer"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => handleRemovePhoto(idx)}
-                            className="absolute top-1.5 right-1.5 p-1 rounded-full bg-red-50 text-red-600 hover:bg-red-100 border border-red-100 transition-all shadow-sm cursor-pointer"
-                            title="Remove photo"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </>
-                      ) : (
-                        <div className="text-center space-y-2 w-full">
-                          <Camera className="w-5 h-5 text-gray-400 mx-auto" />
-                          <div className="text-[10px] text-gray-500 font-bold">Slot {idx + 1}</div>
-
-                          <div className="space-y-1.5">
-                            <label className="inline-flex items-center gap-1 bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-0.5 rounded-md text-[9px] font-bold cursor-pointer transition-all border border-[#E5E1D8]">
-                              <Upload className="w-2.5 h-2.5" />
-                              <span>{isUploadingThisSlot ? "..." : "Upload"}</span>
-                              <input
-                                type="file"
-                                accept="image/*"
-                                disabled={isUploadingThisSlot}
-                                className="hidden"
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) handlePortfolioPhotoUpload(file, idx);
-                                }}
-                              />
-                            </label>
-
-                            <div className="flex gap-1 items-center justify-center">
-                              <input
-                                type="url"
-                                placeholder="Or paste URL"
-                                id={`admin-portfolio-url-${idx}`}
-                                className="w-full text-[9px] bg-gray-50 border border-[#E5E1D8] text-gray-800 rounded p-0.5 focus:outline-none focus:border-[#D4AF37]"
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") {
-                                    e.preventDefault();
-                                    const val = (e.target as HTMLInputElement).value;
-                                    if (val) {
-                                      handleAddPhotoUrl(val, idx);
-                                      (e.target as HTMLInputElement).value = "";
-                                    }
-                                  }
-                                }}
-                              />
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const el = document.getElementById(`admin-portfolio-url-${idx}`) as HTMLInputElement;
-                                  if (el && el.value) {
-                                    handleAddPhotoUrl(el.value, idx);
-                                    el.value = "";
-                                  }
-                                }}
-                                className="p-1 bg-[#D4AF37] text-white rounded hover:bg-[#C5A028] transition-all cursor-pointer"
-                              >
-                                <Check className="w-2.5 h-2.5" />
-                              </button>
-                            </div>
-                          </div>
+                <div className="space-y-3 pt-2">
+                  {revenueByService.map(service => {
+                    const maxRevenue = Math.max(...revenueByService.map(r => r.total), 1);
+                    const percentage = Math.round((service.total / maxRevenue) * 100);
+                    return (
+                      <div key={service.name} className="space-y-1">
+                        <div className="flex justify-between text-[11px] font-medium">
+                          <span className="text-gray-600">{service.name}</span>
+                          <span className="text-gray-900 font-bold">{service.total.toLocaleString()} PKR ({service.count} sales)</span>
                         </div>
-                      )}
+                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${percentage}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Activity timelines */}
+              <div className="bg-white border border-[#E5E1D8] p-6 rounded-3xl space-y-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-serif font-black text-gray-900 uppercase tracking-widest font-mono">Governance Activity Timeline</h4>
+                  <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded font-mono font-bold uppercase">LIVE</span>
+                </div>
+                <div className="space-y-3 pt-1 max-h-[220px] overflow-y-auto pr-1">
+                  {(appSettings.adminLogs || []).slice(0, 6).map((log: any) => (
+                    <div key={log.id} className="flex gap-3 text-xs pb-3 border-b border-gray-50 last:border-0 last:pb-0">
+                      <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0" />
+                      <div className="space-y-0.5 text-left flex-grow">
+                        <div className="flex justify-between">
+                          <p className="font-bold text-gray-900">{log.title}</p>
+                          <span className="text-[9px] text-gray-400 font-mono">{new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                        <p className="text-[11px] text-gray-500 leading-normal">{log.details}</p>
+                        <p className="text-[9px] text-gray-400 font-mono italic">Operator: {log.ip}</p>
+                      </div>
                     </div>
-                  );
-                })}
+                  ))}
+                  {(!appSettings.adminLogs || appSettings.adminLogs.length === 0) && (
+                    <p className="text-xs text-gray-400 text-center py-6">No governance audits logged yet.</p>
+                  )}
+                </div>
               </div>
+
             </div>
 
-            <div>
-              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Offerable Services</label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
-                {SERVICES.map(s => (
-                  <div
-                    key={s.id}
-                    onClick={() => handleServiceToggle(s.id)}
-                    className={`p-2.5 rounded-xl border text-xs text-center cursor-pointer transition-all ${
-                      newServices.includes(s.id)
-                        ? "bg-[#1A1C20] border-[#D4AF37]/50 text-white shadow-sm font-semibold"
-                        : "bg-white border-[#E5E1D8] text-gray-500 hover:text-black"
-                    }`}
-                  >
-                    {s.name}
-                  </div>
-                ))}
-              </div>
-            </div>
+          </div>
+        )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* TAB 2: USER GOVERNANCE */}
+        {activeTab === "users" && (
+          <div className="bg-white border border-[#E5E1D8] rounded-3xl p-6 shadow-sm space-y-6 animate-fade-in">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#E5E1D8]/60 pb-4">
               <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Personal Slogan / Catchy Tagline</label>
+                <h3 className="text-base font-serif font-black text-[#1A1A1A] tracking-tight">Platform User Governance</h3>
+                <p className="text-xs text-gray-500 mt-1">Audit profile registries, toggle suspension flags, or clear stale client datasets.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400 font-bold font-mono">{allProfiles.length} TOTAL USERS</span>
+              </div>
+            </div>
+
+            {/* Search & Filter bar */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-grow">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
+                  <Search className="w-4 h-4 text-gray-400" />
+                </span>
                 <input
                   type="text"
-                  placeholder="e.g. Seeking beautiful conversations and hot karak chai"
-                  value={newTagline}
-                  onChange={(e) => setNewTagline(e.target.value)}
-                  className="w-full bg-[#F3F0E9]/30 border border-[#E5E1D8] text-gray-800 rounded-xl p-2.5 text-xs focus:outline-none focus:border-[#D4AF37]"
+                  placeholder="Search user email, full name, phone number..."
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                  className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-2.5 pl-10 pr-3.5 text-gray-800 text-xs focus:outline-none focus:border-[#D4AF37]"
                 />
               </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Pricing Category</label>
-                <select
-                  value={newPricingTier}
-                  onChange={(e) => setNewPricingTier(e.target.value as any)}
-                  className="w-full bg-[#F3F0E9]/30 border border-[#E5E1D8] text-gray-700 rounded-xl p-2.5 text-xs focus:outline-none focus:border-[#D4AF37] cursor-pointer"
-                >
-                  <option value="Silver">Silver (Base rates)</option>
-                  <option value="Gold">Gold (+30% Premium)</option>
-                  <option value="Platinum">Platinum (+70% over Gold)</option>
-                </select>
-              </div>
-
-              <div className="flex flex-col justify-center">
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Highlight Profile</label>
-                <label className="inline-flex items-center gap-2 mt-2 text-gray-700 text-xs cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={newFeatured}
-                    onChange={(e) => setNewFeatured(e.target.checked)}
-                    className="w-4 h-4 rounded border-gray-300 text-[#D4AF37] focus:ring-[#D4AF37] accent-[#D4AF37]"
-                  />
-                  <span className="font-semibold flex items-center gap-1 text-[#1A1A1A]">
-                    <Sparkles className="w-3.5 h-3.5 text-[#D4AF37]" />
-                    Featured Elite Host
-                  </span>
-                </label>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Detailed Biography / Personal Intro</label>
-              <textarea
-                rows={3}
-                required
-                placeholder="Give an aesthetic, friendly bio outlining their personality, background, conversational depth, and friendly vibe..."
-                value={newBio}
-                onChange={(e) => setNewBio(e.target.value)}
-                className="w-full bg-[#F3F0E9]/30 border border-[#E5E1D8] text-gray-800 rounded-xl p-2.5 text-xs focus:outline-none focus:border-[#D4AF37]"
-              />
-            </div>
-
-            <div className="pt-2">
-              <button
-                type="submit"
-                className="px-6 py-3 bg-[#1A1C20] hover:bg-[#D4AF37] text-white hover:text-black font-bold rounded-xl text-xs uppercase tracking-widest flex items-center gap-1 cursor-pointer transition-all shadow-sm"
-                id="btn-admin-submit-companion"
+              <select
+                value={userCityFilter}
+                onChange={(e) => setUserCityFilter(e.target.value)}
+                className="bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-2.5 px-3.5 text-xs text-gray-700 font-semibold focus:outline-none focus:border-[#D4AF37]"
               >
-                <Plus className="w-4 h-4 stroke-[3]" />
-                <span>Register &amp; Approve Host</span>
-              </button>
+                <option value="all">All Pakistan Cities</option>
+                {PAKISTAN_CITIES.map(city => (
+                  <option key={city} value={city}>{city}</option>
+                ))}
+              </select>
             </div>
-          </form>
-        </div>
-      )}
 
-      {/* Bookings Governance Log */}
-      {activeTab === "bookings_log" && (
-        <div className="bg-white border border-[#E5E1D8] rounded-3xl p-6 shadow-sm space-y-4" id="admin-bookings-log-panel">
-          <div className="border-b border-[#E5E1D8]/60 pb-3">
-            <h3 className="text-base font-bold text-[#1A1A1A]">Governed Bookings Audit Logs</h3>
-            <p className="text-xs text-gray-400">Audit and trace transactions processed across the companionship microfinance network.</p>
-          </div>
-
-          {bookings.length === 0 ? (
-            <p className="text-xs text-gray-400 italic py-6">No audit records or logged transactions exist yet.</p>
-          ) : (
-            <div className="overflow-x-auto rounded-2xl border border-[#E5E1D8]">
-              <table className="w-full text-left text-xs text-gray-700">
-                <thead className="bg-[#F3F0E9]/50 text-gray-500 uppercase font-mono text-[9px] border-b border-[#E5E1D8]">
-                  <tr>
-                    <th className="p-3">Log ID</th>
-                    <th className="p-3">Hired Companion</th>
-                    <th className="p-3">Service</th>
-                    <th className="p-3">Session Date</th>
-                    <th className="p-3">Paid amount</th>
-                    <th className="p-3">Gateway</th>
-                    <th className="p-3">Flow Status</th>
+            {/* Users Table */}
+            <div className="overflow-x-auto border border-[#E5E1D8]/60 rounded-2xl">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-[#F9F8F6] border-b border-[#E5E1D8] font-mono text-gray-400 uppercase text-[9px] font-bold">
+                    <th className="py-3 px-4">Member Profile</th>
+                    <th className="py-3 px-4">Contact &amp; Location</th>
+                    <th className="py-3 px-4">System Role</th>
+                    <th className="py-3 px-4">Clearance Status</th>
+                    <th className="py-3 px-4 text-center">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#E5E1D8]">
-                  {bookings.map(b => (
-                    <tr key={b.id} className="hover:bg-gray-50">
-                      <td className="p-3 font-mono text-[10px] text-gray-400">#{b.id.substring(0, 8)}</td>
-                      <td className="p-3 font-semibold text-[#1A1A1A]">{b.companionName}</td>
-                      <td className="p-3 font-semibold text-[#D4AF37] text-[11px] uppercase tracking-wider">{b.serviceName}</td>
-                      <td className="p-3">{b.date} ({b.time})</td>
-                      <td className="p-3 text-[#E65100] font-bold">{b.totalPrice.toLocaleString()} PKR</td>
-                      <td className="p-3 text-[10px] font-mono text-gray-500">{b.paymentMethod || "Internal"}</td>
-                      <td className="p-3">
-                        <span className={`inline-block px-3 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
-                          b.status === "completed" ? "bg-green-50 text-green-700 border border-green-100" :
-                          b.status === "paid" ? "bg-amber-50 text-amber-800 border border-amber-100" :
-                          "bg-red-50 text-red-700 border border-red-100"
-                        }`}>
-                          {b.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                <tbody className="divide-y divide-[#E5E1D8]/40">
+                  {allProfiles
+                    .filter(p => {
+                      // Don't show the special settings profile in user management table
+                      if (p.email === "settings@yarana.pk") return false;
+
+                      const matchesSearch = p.name.toLowerCase().includes(userSearch.toLowerCase()) ||
+                        p.email.toLowerCase().includes(userSearch.toLowerCase()) ||
+                        p.phone.includes(userSearch);
+                      const matchesCity = userCityFilter === "all" || p.city === userCityFilter;
+                      return matchesSearch && matchesCity;
+                    })
+                    .map(member => {
+                      const isSuspended = member.selectedRole === "suspended";
+                      return (
+                        <tr key={member.email} className="hover:bg-gray-50/50 transition-colors">
+                          <td className="py-3 px-4 flex items-center gap-3">
+                            <img
+                              src={member.avatar}
+                              alt={member.name}
+                              referrerPolicy="no-referrer"
+                              className="w-9 h-9 rounded-full object-cover border border-gray-100"
+                            />
+                            <div className="text-left">
+                              <p className="font-bold text-gray-900">{member.name}</p>
+                              <p className="text-[10px] text-gray-400 font-mono">{member.email}</p>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <p className="font-medium text-gray-800">{member.city}</p>
+                            <p className="text-[10px] text-gray-400 font-mono">{member.phone}</p>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                              member.isAdmin
+                                ? "bg-red-50 text-red-700 border border-red-150"
+                                : "bg-indigo-50 text-indigo-700 border border-indigo-150"
+                            }`}>
+                              {member.isAdmin ? "OWNER" : "CLIENT"}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className={`inline-flex items-center gap-1 text-[10px] font-bold ${
+                              isSuspended ? "text-red-600" : "text-green-600"
+                            }`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${isSuspended ? "bg-red-600 animate-pulse" : "bg-green-600"}`} />
+                              <span>{isSuspended ? "Suspended" : "Active Clear"}</span>
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <div className="flex justify-center gap-2">
+                              {/* Details action */}
+                              <button
+                                onClick={() => setSelectedUserDetail(member)}
+                                className="p-1.5 hover:bg-[#F3F0E9]/30 border border-[#E5E1D8] text-gray-500 hover:text-black rounded-lg cursor-pointer transition-all"
+                                title="View details and transaction logs"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
+
+                              {/* Toggle suspension */}
+                              <button
+                                onClick={() => onSuspendUser(member.email, !isSuspended)}
+                                disabled={member.isAdmin}
+                                className={`p-1.5 border rounded-lg cursor-pointer transition-all ${
+                                  isSuspended
+                                    ? "bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
+                                    : "bg-red-50 border-red-200 text-red-700 hover:bg-red-100"
+                                } disabled:opacity-50 disabled:cursor-not-allowed`}
+                                title={isSuspended ? "Reactivate user account" : "Suspend user account"}
+                              >
+                                <Ban className="w-3.5 h-3.5" />
+                              </button>
+
+                              {/* Delete action */}
+                              <button
+                                onClick={() => onDeleteUser(member.email)}
+                                disabled={member.isAdmin}
+                                className="p-1.5 bg-red-50 hover:bg-red-100 border border-red-150 text-red-600 rounded-lg cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Delete user"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>
-          )}
-        </div>
-      )}
-
-      {activeTab === "pricing" && (
-        <div className="space-y-6" id="admin-pricing-governance-panel">
-          {/* Header Card */}
-          <div className="bg-white border border-[#E5E1D8] rounded-3xl p-6 shadow-sm">
-            <h3 className="text-base font-bold text-[#1A1A1A] flex items-center gap-2">
-              <Coins className="w-5 h-5 text-[#D4AF37]" />
-              <span>Global Services &amp; Tier Pricing Governance</span>
-            </h3>
-            <p className="text-xs text-gray-400 mt-1">
-              Configure baseline service prices (Silver tier) and control premium category multipliers. Changes are updated globally across all reservation systems immediately.
-            </p>
-            {pricingSuccess && (
-              <div className="mt-3 p-3 bg-green-50 text-green-700 text-xs font-semibold rounded-xl border border-green-100 flex items-center gap-1.5 animate-fadeIn">
-                <Check className="w-4 h-4 stroke-[3]" />
-                <span>{pricingSuccess}</span>
-              </div>
-            )}
           </div>
+        )}
 
-          {/* Tier Multipliers Governance Card */}
-          <div className="bg-white border border-[#E5E1D8] rounded-3xl p-6 shadow-sm space-y-4">
-            <div className="border-b border-[#E5E1D8]/60 pb-3 flex justify-between items-center">
-              <div>
-                <h4 className="text-sm font-bold text-[#1A1A1A]">1. Tier Rate Multipliers</h4>
-                <p className="text-[11px] text-gray-400">Define premium rate boosts for companion tiers.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  const defaultMults = { silver: 1.0, gold: 1.3, platinum: 2.21 };
-                  saveStoredMultipliers(defaultMults);
-                  setLocalMultipliers(defaultMults);
-                  setPricingSuccess("Rate multipliers reset to platform defaults successfully!");
-                  setTimeout(() => setPricingSuccess(""), 4000);
-                }}
-                className="text-[10px] uppercase font-bold tracking-widest text-gray-400 hover:text-[#D4AF37] flex items-center gap-1 transition-all cursor-pointer border-0 bg-transparent"
-              >
-                <RefreshCw className="w-3 h-3" />
-                <span>Reset Multipliers</span>
-              </button>
-            </div>
+        {/* TAB 3: COMPANIONS CATALOG */}
+        {activeTab === "companions" && (
+          <div className="space-y-6">
+            
+            {/* Direct Create / Onboard companion Section */}
+            <div className="bg-white border border-[#E5E1D8] rounded-3xl p-6 shadow-sm space-y-6 animate-fade-in">
+              <h3 className="text-base font-serif font-black text-[#1A1A1A] tracking-tight">Onboard New Safe Companion</h3>
+              <form onSubmit={handleAdminOnboardCompanion} className="space-y-4 text-xs">
+                
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="space-y-1">
+                    <label className="font-bold text-gray-400 uppercase tracking-widest text-[9px]">Full Display Name</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Sana Malik"
+                      value={newCompName}
+                      onChange={(e) => setNewCompName(e.target.value)}
+                      className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-2.5 px-3.5 focus:outline-none focus:border-[#D4AF37]"
+                    />
+                  </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Silver Tier */}
-              <div className="border border-[#E5E1D8] rounded-2xl p-4 bg-slate-50/50 space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Silver Tier</span>
-                  <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-mono text-[9px] font-bold">Base</span>
+                  <div className="space-y-1">
+                    <label className="font-bold text-gray-400 uppercase tracking-widest text-[9px]">Age (18-40)</label>
+                    <input
+                      type="number"
+                      required
+                      min={18}
+                      max={40}
+                      value={newCompAge}
+                      onChange={(e) => setNewCompAge(Number(e.target.value))}
+                      className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-2.5 px-3.5 focus:outline-none focus:border-[#D4AF37]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-bold text-gray-400 uppercase tracking-widest text-[9px]">Operational City</label>
+                    <select
+                      value={newCompCity}
+                      onChange={(e) => setNewCompCity(e.target.value as any)}
+                      className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-2.5 px-3.5 focus:outline-none focus:border-[#D4AF37]"
+                    >
+                      {PAKISTAN_CITIES.map(city => (
+                        <option key={city} value={city}>{city}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-                <p className="text-[11px] text-gray-400">Baseline cost used for all pricing computations.</p>
-                <div className="flex items-center gap-1.5 pt-1">
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="space-y-1">
+                    <label className="font-bold text-gray-400 uppercase tracking-widest text-[9px]">Pricing Tariff Tier</label>
+                    <select
+                      value={newCompTier}
+                      onChange={(e) => setNewCompTier(e.target.value as any)}
+                      className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-2.5 px-3.5 focus:outline-none focus:border-[#D4AF37]"
+                    >
+                      <option value="Silver">Silver Tier (Base Pricing)</option>
+                      <option value="Gold">Gold Tier (Premium 1.30x Multiplier)</option>
+                      <option value="Platinum">Platinum Tier (VVIP 2.21x Multiplier)</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-bold text-gray-400 uppercase tracking-widest text-[9px]">Gender Identity</label>
+                    <select
+                      value={newCompGender}
+                      onChange={(e) => setNewCompGender(e.target.value as any)}
+                      className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-2.5 px-3.5 focus:outline-none focus:border-[#D4AF37]"
+                    >
+                      <option value="Female">Female</option>
+                      <option value="Male">Male</option>
+                      <option value="Other">Non-Binary / Other</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-bold text-gray-400 uppercase tracking-widest text-[9px]">Profile Avatar Image URL</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Unsplash URL or leave empty"
+                      value={newCompAvatar}
+                      onChange={(e) => setNewCompAvatar(e.target.value)}
+                      className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-2.5 px-3.5 focus:outline-none focus:border-[#D4AF37]"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-gray-400 uppercase tracking-widest text-[9px]">Tagline / Direct Catchphrase</label>
                   <input
-                    type="number"
-                    disabled
-                    value={localMultipliers.silver}
-                    className="w-full bg-slate-100/80 border border-slate-200 text-slate-500 rounded-xl p-2 text-xs font-mono font-bold focus:outline-none"
+                    type="text"
+                    placeholder="e.g. Cozy bookworm ready for warm coffee conversations and quiet galleries."
+                    value={newCompTagline}
+                    onChange={(e) => setNewCompTagline(e.target.value)}
+                    className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-2.5 px-3.5 focus:outline-none focus:border-[#D4AF37]"
                   />
-                  <span className="text-xs text-slate-400 font-bold font-mono">x</span>
                 </div>
-              </div>
 
-              {/* Gold Tier */}
-              <div className="border border-[#E5E1D8] rounded-2xl p-4 bg-[#FDFBF7] space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-[#B8941B] uppercase tracking-wider">Gold Tier</span>
-                  <span className="px-2 py-0.5 rounded bg-[#F9F5EB] text-[#B8941B] font-mono text-[9px] font-bold">Premium</span>
-                </div>
-                <p className="text-[11px] text-gray-400">Premium surcharge boost for Gold hosts.</p>
-                <div className="flex items-center gap-1.5 pt-1">
-                  <input
-                    type="number"
-                    step="0.05"
-                    min="1.0"
-                    max="5.0"
-                    value={localMultipliers.gold}
-                    onChange={(e) => {
-                      const val = parseFloat(e.target.value) || 1.0;
-                      const updated = { ...localMultipliers, gold: val };
-                      setLocalMultipliers(updated);
-                    }}
-                    className="w-full bg-white border border-[#E5E1D8] text-gray-800 rounded-xl p-2 text-xs font-mono font-bold focus:outline-none focus:border-[#D4AF37]"
+                <div className="space-y-1">
+                  <label className="font-bold text-gray-400 uppercase tracking-widest text-[9px]">Biography &amp; Core Boundaries</label>
+                  <textarea
+                    rows={2}
+                    required
+                    placeholder="Provide a descriptive biography, social boundaries, conversational style..."
+                    value={newCompBio}
+                    onChange={(e) => setNewCompBio(e.target.value)}
+                    className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-2.5 px-3.5 focus:outline-none focus:border-[#D4AF37] resize-none"
                   />
-                  <span className="text-xs text-gray-400 font-bold font-mono">x</span>
                 </div>
-              </div>
 
-              {/* Platinum Tier */}
-              <div className="border border-[#E5E1D8] rounded-2xl p-4 bg-indigo-50/20 space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Platinum Tier</span>
-                  <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 font-mono text-[9px] font-bold">Super Surcharge</span>
-                </div>
-                <p className="text-[11px] text-gray-400">Exclusive surcharge boost for Platinum hosts.</p>
-                <div className="flex items-center gap-1.5 pt-1">
-                  <input
-                    type="number"
-                    step="0.05"
-                    min="1.0"
-                    max="10.0"
-                    value={localMultipliers.platinum}
-                    onChange={(e) => {
-                      const val = parseFloat(e.target.value) || 1.0;
-                      const updated = { ...localMultipliers, platinum: val };
-                      setLocalMultipliers(updated);
-                    }}
-                    className="w-full bg-white border border-[#E5E1D8] text-gray-800 rounded-xl p-2 text-xs font-mono font-bold focus:outline-none focus:border-[#D4AF37]"
-                  />
-                  <span className="text-xs text-gray-400 font-bold font-mono">x</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end pt-1">
-              <button
-                type="button"
-                onClick={() => {
-                  saveStoredMultipliers(localMultipliers);
-                  setPricingSuccess("Premium category multipliers successfully saved!");
-                  setTimeout(() => setPricingSuccess(""), 4000);
-                }}
-                className="px-5 py-2.5 bg-[#1A1C20] hover:bg-[#D4AF37] text-white hover:text-black font-bold rounded-xl text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-all shadow-sm border-0"
-              >
-                <Save className="w-3.5 h-3.5" />
-                <span>Save Multipliers</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Services Matrix Governance Board */}
-          <div className="bg-white border border-[#E5E1D8] rounded-3xl p-6 shadow-sm space-y-4">
-            <div className="border-b border-[#E5E1D8]/60 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <h4 className="text-sm font-bold text-[#1A1A1A]">2. Interactive Services Pricing Matrix</h4>
-                <p className="text-[11px] text-gray-400">View and edit base prices of all core companion services directly.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  if (confirm("Are you sure you want to restore all base services pricing to default values?")) {
-                    saveStoredServices(INITIAL_SERVICES);
-                    setLocalServices([...INITIAL_SERVICES]);
-                    setPricingSuccess("Baseline services pricing restored to system defaults!");
-                    setTimeout(() => setPricingSuccess(""), 4000);
-                  }
-                }}
-                className="text-[10px] uppercase font-bold tracking-widest text-red-500 hover:text-red-700 flex items-center gap-1 transition-all cursor-pointer border-0 bg-transparent self-start"
-              >
-                <RefreshCw className="w-3 h-3" />
-                <span>Restore Default Services</span>
-              </button>
-            </div>
-
-            <div className="overflow-x-auto rounded-2xl border border-[#E5E1D8]">
-              <table className="w-full text-left text-xs text-gray-700 min-w-[700px]">
-                <thead className="bg-[#F3F0E9]/50 text-gray-500 uppercase font-mono text-[9px] border-b border-[#E5E1D8]">
-                  <tr>
-                    <th className="p-3">Service</th>
-                    <th className="p-3">Base Time</th>
-                    <th className="p-3 bg-slate-50 border-r border-[#E5E1D8]">Silver Rate (1.00x Base)</th>
-                    <th className="p-3 bg-yellow-50/30 border-r border-[#E5E1D8]">Gold Rate ({localMultipliers.gold.toFixed(2)}x)</th>
-                    <th className="p-3 bg-indigo-50/10">Platinum Rate ({localMultipliers.platinum.toFixed(2)}x)</th>
-                    <th className="p-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E5E1D8]">
-                  {localServices.map((service) => {
-                    const isEditing = editingServiceId === service.id;
-                    const silBase = service.basePrice;
-                    const silExtra = service.extraHourPrice;
-
-                    // Gold Pricing
-                    const goldBase = Math.round(silBase * localMultipliers.gold);
-                    const goldExtra = Math.round(silExtra * localMultipliers.gold);
-
-                    // Platinum Pricing
-                    const platBase = Math.round(silBase * localMultipliers.platinum);
-                    const platExtra = Math.round(silExtra * localMultipliers.platinum);
-
-                    const getServiceIcon = (id: string) => {
-                      switch (id) {
-                        case "dining": return <Utensils className="w-4 h-4 text-orange-600" />;
-                        case "movie": return <Film className="w-4 h-4 text-blue-600" />;
-                        case "call": return <PhoneCall className="w-4 h-4 text-green-600" />;
-                        case "day_spend": return <Sun className="w-4 h-4 text-yellow-600" />;
-                        case "travel": return <Compass className="w-4 h-4 text-indigo-600" />;
-                        case "night_spend": return <Moon className="w-4 h-4 text-purple-600" />;
-                        case "study": return <BookOpen className="w-4 h-4 text-teal-600" />;
-                        default: return <Settings className="w-4 h-4 text-gray-600" />;
-                      }
-                    };
-
-                    return (
-                      <tr key={service.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="p-3">
-                          <div className="flex items-center gap-2">
-                            <div className="p-1.5 rounded-lg bg-[#F3F0E9]/60">
-                              {getServiceIcon(service.id)}
-                            </div>
-                            <div>
-                              <div className="font-semibold text-gray-800">{service.name}</div>
-                              <div className="text-[10px] text-gray-400 line-clamp-1 max-w-[220px]">
-                                {service.description}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-
-                        <td className="p-3 font-semibold text-gray-600">
-                          {service.baseHours} {service.id === "call" ? "minutes" : "hours"}
-                        </td>
-
-                        {/* Silver Tier (Base) */}
-                        <td className="p-3 bg-slate-50 border-r border-[#E5E1D8]">
-                          {isEditing ? (
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-1">
-                                <span className="text-[10px] text-gray-400 font-semibold w-10">Base:</span>
-                                <input
-                                  type="number"
-                                  value={editedBasePrice}
-                                  onChange={(e) => setEditedBasePrice(e.target.value)}
-                                  className="w-20 px-1.5 py-0.5 border border-[#E5E1D8] rounded text-xs font-mono font-bold bg-white text-gray-800 focus:outline-none focus:border-[#D4AF37]"
-                                />
-                                <span className="text-[10px] text-gray-500 font-semibold">PKR</span>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <span className="text-[10px] text-gray-400 font-semibold w-10">Extra:</span>
-                                <input
-                                  type="number"
-                                  value={editedExtraPrice}
-                                  onChange={(e) => setEditedExtraPrice(e.target.value)}
-                                  className="w-20 px-1.5 py-0.5 border border-[#E5E1D8] rounded text-xs font-mono font-bold bg-white text-gray-800 focus:outline-none focus:border-[#D4AF37]"
-                                />
-                                <span className="text-[10px] text-gray-500 font-semibold">PKR / {service.extraUnitName}</span>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="space-y-0.5">
-                              <div className="font-bold text-gray-800">{silBase.toLocaleString()} PKR</div>
-                              <div className="text-[10px] text-gray-400 font-mono">
-                                +{silExtra.toLocaleString()} PKR / {service.extraUnitName}
-                              </div>
-                            </div>
-                          )}
-                        </td>
-
-                        {/* Gold Tier Surcharge */}
-                        <td className="p-3 bg-yellow-50/20 border-r border-[#E5E1D8] font-medium text-[#B8941B]">
-                          {isEditing ? (
-                            <div className="text-[10px] text-gray-400 italic">Auto-calculated from Base</div>
-                          ) : (
-                            <div className="space-y-0.5">
-                              <div className="font-bold">{goldBase.toLocaleString()} PKR</div>
-                              <div className="text-[10px] font-mono text-gray-400">
-                                +{goldExtra.toLocaleString()} PKR / {service.extraUnitName}
-                              </div>
-                            </div>
-                          )}
-                        </td>
-
-                        {/* Platinum Tier Surcharge */}
-                        <td className="p-3 bg-indigo-50/5 font-medium text-indigo-700">
-                          {isEditing ? (
-                            <div className="text-[10px] text-gray-400 italic">Auto-calculated from Base</div>
-                          ) : (
-                            <div className="space-y-0.5">
-                              <div className="font-bold">{platBase.toLocaleString()} PKR</div>
-                              <div className="text-[10px] font-mono text-gray-400">
-                                +{platExtra.toLocaleString()} PKR / {service.extraUnitName}
-                              </div>
-                            </div>
-                          )}
-                        </td>
-
-                        {/* Actions */}
-                        <td className="p-3 text-right">
-                          {isEditing ? (
-                            <div className="flex justify-end gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const updatedBase = parseInt(editedBasePrice) || service.basePrice;
-                                  const updatedExtra = parseInt(editedExtraPrice) || service.extraHourPrice;
-                                  const updatedServices = localServices.map(s => {
-                                    if (s.id === service.id) {
-                                      return {
-                                        ...s,
-                                        basePrice: updatedBase,
-                                        extraHourPrice: updatedExtra
-                                      };
-                                    }
-                                    return s;
-                                  });
-                                  saveStoredServices(updatedServices);
-                                  setLocalServices(updatedServices);
-                                  setEditingServiceId(null);
-                                  setPricingSuccess(`Baseline rates for ${service.name} updated successfully!`);
-                                  setTimeout(() => setPricingSuccess(""), 4000);
-                                }}
-                                className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-[10px] font-bold flex items-center gap-1 shadow-sm cursor-pointer border-0"
-                              >
-                                <Check className="w-3 h-3" />
-                                <span>Save</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setEditingServiceId(null)}
-                                className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded text-[10px] font-bold flex items-center gap-1 border border-gray-200 cursor-pointer"
-                              >
-                                <X className="w-3 h-3" />
-                                <span>Cancel</span>
-                              </button>
-                            </div>
-                          ) : (
+                {/* Portfolio picture onboarding */}
+                <div className="space-y-2">
+                  <label className="font-bold text-gray-400 uppercase tracking-widest text-[9px] block">Upload Onboarding Portfolio (Max 3 pictures)</label>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[0, 1, 2].map(idx => (
+                      <div key={idx} className="relative aspect-square border border-dashed border-[#E5E1D8] rounded-xl bg-gray-50 flex flex-col items-center justify-center overflow-hidden hover:bg-gray-100/50 hover:border-[#D4AF37] transition-all cursor-pointer">
+                        {newCompPreviews[idx] ? (
+                          <>
+                            <img src={newCompPreviews[idx]} alt="preview" className="w-full h-full object-cover" />
                             <button
                               type="button"
                               onClick={() => {
-                                setEditingServiceId(service.id);
-                                setEditedBasePrice(service.basePrice.toString());
-                                setEditedExtraPrice(service.extraHourPrice.toString());
+                                setNewCompPreviews(prev => {
+                                  const copy = { ...prev };
+                                  delete copy[idx];
+                                  return copy;
+                                });
+                                setNewCompPhotos(prev => {
+                                  const copy = [...prev];
+                                  copy[idx] = "";
+                                  return copy;
+                                });
                               }}
-                              className="px-2.5 py-1 text-gray-600 hover:text-black hover:bg-gray-100 rounded-md border border-[#E5E1D8] text-[10px] font-bold flex items-center gap-1 ml-auto cursor-pointer bg-white"
+                              className="absolute top-1.5 right-1.5 p-1 rounded-full bg-red-650 text-white hover:bg-red-700 cursor-pointer"
                             >
-                              <Edit2 className="w-3 h-3" />
-                              <span>Edit Rates</span>
+                              <X className="w-3.5 h-3.5" />
                             </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
+                          </>
+                        ) : (
+                          <label className="w-full h-full flex flex-col items-center justify-center p-2 text-center cursor-pointer">
+                            <Upload className={`w-5 h-5 text-gray-400 ${uploadSlotIdx === idx ? "animate-bounce" : ""}`} />
+                            <span className="text-[10px] text-gray-400 mt-1 font-semibold">{uploadSlotIdx === idx ? "Uploading..." : "Click to select"}</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (f) handleCompanionPhotoUpload(f, idx);
+                              }}
+                            />
+                          </label>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
 
-      {activeTab === "payments" && (
-        <div className="bg-white border border-[#E5E1D8] rounded-3xl p-6 shadow-sm space-y-6" id="admin-payments-panel">
-          <div className="border-b border-[#E5E1D8]/60 pb-3">
-            <h3 className="text-lg font-serif font-bold text-[#1A1A1A]">Manual Payment Request Audits</h3>
-            <p className="text-xs text-gray-400">Review, approve, or reject guest transactions to unlock companion sessions.</p>
-          </div>
-
-          {paymentRequests.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center text-gray-400">
-              <CreditCard className="w-10 h-10 text-gray-300 mb-2" />
-              <p className="text-sm font-semibold">No payment requests recorded yet.</p>
-              <p className="text-xs">Incoming user transfers will populate here automatically.</p>
+                <button
+                  type="submit"
+                  className="w-full py-3 bg-[#1A1C20] hover:bg-[#D4AF37] hover:text-black text-white font-bold tracking-wider text-xs uppercase rounded-xl transition-all shadow-sm cursor-pointer"
+                >
+                  Confirm and Authorize Listing
+                </button>
+              </form>
             </div>
-          ) : (
-            <div className="overflow-x-auto rounded-2xl border border-[#E5E1D8] shadow-sm">
+
+            {/* Catalog list manager */}
+            <div className="bg-white border border-[#E5E1D8] rounded-3xl p-6 shadow-sm space-y-6 animate-fade-in">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                <div>
+                  <h3 className="text-base font-serif font-black text-[#1A1A1A] tracking-tight">Companions Catalog Matrix</h3>
+                  <p className="text-xs text-gray-500 mt-1">Change levels, audit profiles, adjust online visibility, or reject applications.</p>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Filter by name..."
+                    value={companionSearch}
+                    onChange={(e) => setCompanionSearch(e.target.value)}
+                    className="bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-1.5 px-3 text-xs focus:outline-none focus:border-[#D4AF37]"
+                  />
+                  <select
+                    value={companionStatusFilter}
+                    onChange={(e) => setCompanionStatusFilter(e.target.value)}
+                    className="bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-1.5 px-2 text-xs focus:outline-none focus:border-[#D4AF37] font-semibold text-gray-600"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="Pending">Pending Approvals</option>
+                    <option value="Approved">Approved Listings</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Table of Companions */}
+              <div className="overflow-x-auto border border-[#E5E1D8]/60 rounded-2xl">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-[#F9F8F6] border-b border-[#E5E1D8] font-mono text-gray-400 uppercase text-[9px] font-bold">
+                      <th className="py-3 px-4">Companion Profile</th>
+                      <th className="py-3 px-4">Location &amp; Info</th>
+                      <th className="py-3 px-4">Pricing Membership</th>
+                      <th className="py-3 px-4">Status &amp; Online</th>
+                      <th className="py-3 px-4 text-center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#E5E1D8]/40">
+                    {companions
+                      .filter(c => {
+                        const matchesSearch = c.name.toLowerCase().includes(companionSearch.toLowerCase());
+                        const matchesStatus = companionStatusFilter === "all" ||
+                          (companionStatusFilter === "Pending" && c.status === CompanionStatus.PENDING) ||
+                          (companionStatusFilter === "Approved" && c.status === CompanionStatus.APPROVED);
+                        return matchesSearch && matchesStatus;
+                      })
+                      .map(companion => {
+                        const isPending = companion.status === CompanionStatus.PENDING;
+                        return (
+                          <tr key={companion.id} className="hover:bg-gray-50/50 transition-colors">
+                            <td className="py-3 px-4 flex items-center gap-3">
+                              <img
+                                src={companion.avatar}
+                                alt={companion.name}
+                                className="w-10 h-10 rounded-full object-cover border border-gray-100"
+                              />
+                              <div className="text-left">
+                                <p className="font-bold text-gray-900">{companion.name}</p>
+                                <p className="text-[10px] text-gray-400 font-mono">Age: {companion.age} &bull; {companion.gender}</p>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <p className="font-medium text-gray-800">{companion.city}</p>
+                              <p className="text-[10px] text-gray-400 max-w-[150px] truncate">{companion.bio}</p>
+                            </td>
+                            <td className="py-3 px-4">
+                              {/* One-click membership switching */}
+                              <div className="flex gap-1">
+                                {(["Silver", "Gold", "Platinum"] as PricingTier[]).map(t => {
+                                  const isActive = companion.pricingTier === t;
+                                  return (
+                                    <button
+                                      key={t}
+                                      onClick={async () => {
+                                        if (onUpdateCompanionTier) {
+                                          onUpdateCompanionTier(companion.id, t);
+                                          displaySuccess(`Upgraded '${companion.name}' to ${t} tier status instantly!`);
+                                        }
+                                      }}
+                                      className={`px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer border ${
+                                        isActive
+                                          ? "bg-amber-50 border-amber-300 text-[#8a6d1c]"
+                                          : "bg-white border-[#E5E1D8] text-gray-400 hover:text-black hover:border-black"
+                                      }`}
+                                    >
+                                      {t}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-2">
+                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                                  isPending ? "bg-amber-100 text-amber-800 border border-amber-200" : "bg-green-100 text-green-800 border border-green-200"
+                                }`}>
+                                  {companion.status}
+                                </span>
+                                {!isPending && (
+                                  <button
+                                    onClick={() => onToggleOnline(companion.id)}
+                                    className="p-1 hover:bg-[#F3F0E9]/30 rounded-lg cursor-pointer transition-all"
+                                    title={companion.isOnline ? "Set Offline" : "Set Online"}
+                                  >
+                                    <span className={`w-2 h-2 inline-block rounded-full ${companion.isOnline ? "bg-green-500 animate-ping" : "bg-gray-400"}`} />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              {isPending ? (
+                                <div className="flex justify-center gap-1.5">
+                                  <button
+                                    onClick={() => {
+                                      onApproveCompanion(companion.id, "Silver");
+                                      displaySuccess(`Approved and listed companion application for '${companion.name}'!`);
+                                    }}
+                                    className="py-1 px-2.5 bg-green-500 text-white rounded-lg text-[10px] font-bold cursor-pointer hover:bg-green-600 transition-all"
+                                  >
+                                    Approve Application
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      onRejectCompanion(companion.id);
+                                      displayError(`Rejected companion application for '${companion.name}'`);
+                                    }}
+                                    className="py-1 px-2.5 bg-red-650 text-white rounded-lg text-[10px] font-bold cursor-pointer hover:bg-red-700 transition-all"
+                                  >
+                                    Reject
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex justify-center gap-2">
+                                  <button
+                                    onClick={() => setEditingCompanion(companion)}
+                                    className="p-1.5 hover:bg-[#F3F0E9]/30 border border-[#E5E1D8] text-gray-500 hover:text-black rounded-lg cursor-pointer transition-all"
+                                    title="Edit companion profile info"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      if (confirm(`Are you sure you want to completely erase ${companion.name} from the catalog?`)) {
+                                        onRemoveCompanion(companion.id);
+                                        displayError(`Companion '${companion.name}' permanently dropped.`);
+                                      }
+                                    }}
+                                    className="p-1.5 bg-red-50 hover:bg-red-100 border border-red-150 text-red-650 rounded-lg cursor-pointer transition-all"
+                                    title="Erase companion profile"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* TAB 4: PAYMENT VERIFICATION AUDITS */}
+        {activeTab === "payments" && (
+          <div className="bg-white border border-[#E5E1D8] rounded-3xl p-6 shadow-sm space-y-6 animate-fade-in">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+              <div>
+                <h3 className="text-base font-serif font-black text-[#1A1A1A] tracking-tight">Manual Payment Verification Center</h3>
+                <p className="text-xs text-gray-500 mt-1">Audit billing slips, verify EasyPaisa/JazzCash ledger reference IDs, and unlock paid bookings.</p>
+              </div>
+              <select
+                value={paymentStatusFilter}
+                onChange={(e) => setPaymentStatusFilter(e.target.value)}
+                className="bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-2 px-3 text-xs font-bold text-gray-600 focus:outline-none focus:border-[#D4AF37]"
+              >
+                <option value="Pending">Pending Audit</option>
+                <option value="Approved">Approved Transactions</option>
+                <option value="Rejected">Rejected/Flagged Slips</option>
+              </select>
+            </div>
+
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
+                <Search className="w-4 h-4 text-gray-400" />
+              </span>
+              <input
+                type="text"
+                placeholder="Search by transaction reference ID or client email..."
+                value={paymentSearch}
+                onChange={(e) => setPaymentSearch(e.target.value)}
+                className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-2.5 pl-10 pr-3.5 text-gray-800 text-xs focus:outline-none focus:border-[#D4AF37]"
+              />
+            </div>
+
+            {/* Payments Table */}
+            <div className="overflow-x-auto border border-[#E5E1D8]/60 rounded-2xl">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="bg-[#F3F0E9]/50 border-b border-[#E5E1D8]/80 text-[10px] uppercase tracking-wider font-bold text-gray-500">
-                    <th className="p-4">User & Submission Time</th>
-                    <th className="p-4">Requested Product</th>
-                    <th className="p-4">Transaction Details</th>
-                    <th className="p-4 text-right">Amount</th>
-                    <th className="p-4 text-center">Status</th>
-                    <th className="p-4 text-right">Actions</th>
+                  <tr className="bg-[#F9F8F6] border-b border-[#E5E1D8] font-mono text-gray-400 uppercase text-[9px] font-bold">
+                    <th className="py-3 px-4">Sender &amp; Contact</th>
+                    <th className="py-3 px-4">Booking Tariff</th>
+                    <th className="py-3 px-4">Manual Method &amp; Reference ID</th>
+                    <th className="py-3 px-4">Submitted At</th>
+                    <th className="py-3 px-4 text-center">Clearance Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#E5E1D8]/45 text-[#2D2D2D]">
-                  {paymentRequests.map((req) => (
-                    <tr key={req.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="p-4">
-                        <div className="font-bold text-gray-800">{req.userEmail || "Anonymous Guest"}</div>
-                        <div className="text-[10px] text-gray-450 mt-0.5">ID: {req.userId.substring(0, 8)}...</div>
-                        <div className="text-[10px] text-gray-450 mt-0.5">{new Date(req.createdAt).toLocaleString()}</div>
-                      </td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-2">
-                          <img
-                            src={req.companionAvatar}
-                            alt={req.companionName}
-                            referrerPolicy="no-referrer"
-                            className="w-7 h-7 rounded-full object-cover border border-[#E5E1D8]"
-                          />
-                          <div>
-                            <div className="font-semibold text-gray-800">with {req.companionName}</div>
-                            <div className="text-[10px] text-[#D4AF37] font-bold uppercase tracking-wider mt-0.5">{req.serviceName}</div>
-                            <div className="text-[10px] text-gray-500 mt-0.5">{req.bookingDate} @ {req.bookingTime} ({req.duration} {req.serviceId === "call" ? "mins" : "hours"})</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="p-4 space-y-1">
-                        <div>
-                          <span className="text-[10px] font-bold text-gray-400 uppercase">TXN ID:</span>{" "}
-                          <span className="font-mono text-gray-800 font-semibold bg-gray-100 px-1.5 py-0.5 rounded">{req.transactionId || "N/A"}</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] font-bold text-gray-400 uppercase">Sender (Last 4):</span>{" "}
-                          <span className="font-mono text-gray-800 font-bold bg-gray-100 px-1.5 py-0.5 rounded">{req.lastFour}</span>
-                        </div>
-                        {req.paymentNote && (
-                          <div className="text-[10px] text-gray-500 italic max-w-xs truncate" title={req.paymentNote}>
-                            "{req.paymentNote}"
-                          </div>
-                        )}
-                      </td>
-                      <td className="p-4 text-right font-bold text-gray-800">
-                        {req.totalPrice.toLocaleString()} PKR
-                      </td>
-                      <td className="p-4 text-center">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border shadow-sm ${
-                            req.status === "Pending"
-                              ? "bg-amber-50 border-amber-200 text-amber-700"
-                              : req.status === "Approved"
-                              ? "bg-green-50 border-green-200 text-green-700"
-                              : "bg-red-50 border-red-200 text-red-700"
-                          }`}
+                <tbody className="divide-y divide-[#E5E1D8]/40">
+                  {paymentRequests
+                    .filter(p => {
+                      const matchesStatus = p.status === paymentStatusFilter;
+                      const matchesSearch = p.transactionId?.toLowerCase().includes(paymentSearch.toLowerCase()) ||
+                        p.userEmail?.toLowerCase().includes(paymentSearch.toLowerCase());
+                      return matchesStatus && matchesSearch;
+                    })
+                    .map(request => {
+                      const extended = parsePaymentNote(request.paymentNote);
+                      const finalSenderName = extended.senderName || request.userEmail?.split("@")[0] || "Anonymous";
+                      return (
+                        <tr
+                          key={request.id}
+                          className="hover:bg-gray-50/50 transition-colors cursor-pointer"
+                          onClick={() => {
+                            setSelectedPaymentDetail(request);
+                            setAdminReviewNote(extended.adminNote || "");
+                          }}
                         >
-                          {req.status}
-                        </span>
-                      </td>
-                      <td className="p-4 text-right">
-                        {req.status === "Pending" ? (
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => onRejectPayment(req.id)}
-                              className="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-100 rounded-lg text-[10px] font-bold uppercase transition-all cursor-pointer flex items-center gap-0.5"
-                            >
-                              <X className="w-3 h-3" /> Reject
-                            </button>
-                            <button
-                              onClick={() => onApprovePayment(req.id)}
-                              className="px-2.5 py-1.5 bg-green-50 hover:bg-green-105 text-green-800 border border-green-105 rounded-lg text-[10px] font-bold uppercase transition-all cursor-pointer flex items-center gap-0.5 shadow-sm"
-                            >
-                              <Check className="w-3 h-3" /> Approve
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="text-[10px] text-gray-400 italic">Audited</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                          <td className="py-3 px-4">
+                            <p className="font-bold text-gray-900">{finalSenderName}</p>
+                            <p className="text-[10px] text-gray-400 font-mono">{request.userEmail}</p>
+                          </td>
+                          <td className="py-3 px-4 text-left">
+                            <p className="font-extrabold text-orange-600 font-mono text-xs">{request.totalPrice.toLocaleString()} PKR</p>
+                            <p className="text-[10px] text-gray-500">{request.serviceName} &bull; {request.companionName}</p>
+                          </td>
+                          <td className="py-3 px-4">
+                            <p className="font-bold text-gray-800">{extended.senderAccountNumber ? `Manual (${extended.senderAccountNumber.substring(0,4)}...)` : "Mobile Money"}</p>
+                            <p className="text-[10px] text-gray-400 font-mono">ID: {request.transactionId}</p>
+                          </td>
+                          <td className="py-3 px-4 text-gray-500 font-mono text-[10px]">
+                            {new Date(request.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold inline-block ${
+                              request.status === "Pending"
+                                ? "bg-amber-100 text-amber-800 border border-amber-200"
+                                : request.status === "Approved"
+                                ? "bg-green-100 text-green-800 border border-green-200"
+                                : "bg-red-100 text-red-800 border border-red-200"
+                            }`}>
+                              {request.status}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
 
-      {showLimitModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-3xl p-6 max-w-sm w-full border border-[#E5E1D8] shadow-2xl text-center space-y-4"
-          >
-            <div className="mx-auto w-12 h-12 bg-[#D4AF37]/10 rounded-full flex items-center justify-center text-[#D4AF37]">
-              <ShieldAlert className="w-6 h-6" />
+        {/* TAB 5: PRICING MATRIX */}
+        {activeTab === "pricing" && (
+          <div className="bg-white border border-[#E5E1D8] rounded-3xl p-6 shadow-sm space-y-6 animate-fade-in">
+            <div className="border-b border-[#E5E1D8]/60 pb-4">
+              <h3 className="text-base font-serif font-black text-[#1A1A1A] tracking-tight">System Pricing Tariff Matrix</h3>
+              <p className="text-xs text-gray-500 mt-1">Adjust companion category multipliers or adjust direct service pricing across the catalog instantly.</p>
             </div>
-            <div className="space-y-1.5">
-              <h3 className="text-base font-bold text-[#1A1A1A]">Free plan limit reached.</h3>
-              <p className="text-xs text-gray-500 leading-relaxed">
-                You can only upload up to 3 pictures on the Free Plan. Upgrade to Pro to create unlimited companions and upload more pictures.
-              </p>
+
+            {/* Category Multipliers */}
+            <div className="space-y-4">
+              <h4 className="text-xs font-serif font-black text-gray-900 uppercase tracking-widest font-mono">Category Tariffs Multipliers</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                
+                <div className="bg-gray-50 p-4 rounded-2xl border border-[#E5E1D8] space-y-2">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Silver Tier Multiplier</p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      step={0.1}
+                      min={0.5}
+                      max={3.0}
+                      value={silverMultiplier}
+                      onChange={(e) => setSilverMultiplier(Number(e.target.value))}
+                      className="w-full bg-white border border-[#E5E1D8] rounded-xl py-2 px-3 text-xs font-bold focus:outline-none"
+                    />
+                    <span className="text-[10px] font-bold font-mono text-gray-400">BASE RATE</span>
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 p-4 rounded-2xl border border-[#E5E1D8] space-y-2">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Gold Tier Multiplier</p>
+                  <input
+                    type="number"
+                    step={0.05}
+                    min={1.0}
+                    max={5.0}
+                    value={goldMultiplier}
+                    onChange={(e) => setGoldMultiplier(Number(e.target.value))}
+                    className="w-full bg-white border border-[#E5E1D8] rounded-xl py-2 px-3 text-xs font-bold focus:outline-none"
+                  />
+                </div>
+
+                <div className="bg-gray-50 p-4 rounded-2xl border border-[#E5E1D8] space-y-2">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Platinum Tier Multiplier</p>
+                  <input
+                    type="number"
+                    step={0.05}
+                    min={1.5}
+                    max={10.0}
+                    value={platinumMultiplier}
+                    onChange={(e) => setPlatinumMultiplier(Number(e.target.value))}
+                    className="w-full bg-white border border-[#E5E1D8] rounded-xl py-2 px-3 text-xs font-bold focus:outline-none"
+                  />
+                </div>
+
+              </div>
             </div>
+
+            {/* Service Base Prices */}
+            <div className="space-y-4 pt-2">
+              <h4 className="text-xs font-serif font-black text-gray-900 uppercase tracking-widest font-mono">Service Base Prices (Tariffs)</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {SERVICES.map(s => (
+                  <div key={s.id} className="flex justify-between items-center bg-[#F9F8F6] border border-[#E5E1D8]/60 p-3.5 rounded-2xl">
+                    <div className="text-left">
+                      <p className="text-xs font-bold text-gray-900">{s.name}</p>
+                      <p className="text-[10px] text-gray-400">Duration Covered: {s.baseHours} {s.extraUnitName}s</p>
+                    </div>
+                    <div className="relative max-w-[120px]">
+                      <input
+                        type="number"
+                        min={100}
+                        max={100000}
+                        step={100}
+                        value={customBasePrices[s.id] !== undefined ? customBasePrices[s.id] : s.basePrice}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          setCustomBasePrices(prev => ({ ...prev, [s.id]: val }));
+                        }}
+                        className="w-full bg-white border border-[#E5E1D8] rounded-xl py-1.5 pl-3 pr-8 text-xs font-mono font-bold text-right focus:outline-none"
+                      />
+                      <span className="absolute inset-y-0 right-2.5 flex items-center text-[9px] font-bold text-gray-400">PKR</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <button
-              onClick={() => setShowLimitModal(false)}
-              className="w-full bg-[#1A1A1A] hover:bg-black text-white rounded-xl py-2.5 text-xs font-bold transition-all shadow-md cursor-pointer"
+              onClick={handleSavePricingMatrix}
+              className="w-full py-3 bg-[#1A1C20] hover:bg-[#D4AF37] hover:text-black text-white font-bold tracking-wider text-xs uppercase rounded-xl transition-all shadow-sm cursor-pointer"
             >
-              Understood
+              Update Tariffs Nationwide
             </button>
-          </motion.div>
-        </div>
-      )}
+          </div>
+        )}
+
+        {/* TAB 6: CONTENT HUB */}
+        {activeTab === "content" && (
+          <div className="bg-white border border-[#E5E1D8] rounded-3xl p-6 shadow-sm space-y-6 animate-fade-in">
+            <div className="border-b border-[#E5E1D8]/60 pb-4">
+              <h3 className="text-base font-serif font-black text-[#1A1A1A] tracking-tight">Governance Content Hub</h3>
+              <p className="text-xs text-gray-500 mt-1">Deploy global announcements, safety advisories, or operational banners to all client navigation panels instantly.</p>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <label className="font-bold text-gray-400 uppercase tracking-widest text-[9px]">Top Navigation Announcement Ticker</label>
+                <input
+                  type="text"
+                  value={announcementText}
+                  onChange={(e) => setAnnouncementText(e.target.value)}
+                  placeholder="e.g. ✨ Welcome to Pakistan's premier verified social companionship registry!"
+                  className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-2.5 px-3.5 text-xs focus:outline-none focus:border-[#D4AF37]"
+                />
+                <p className="text-[10px] text-gray-400 italic">Displayed on top navigation bar across all screens.</p>
+              </div>
+
+              <div className="space-y-2 pt-2 border-t border-[#E5E1D8]/40">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-gray-400 uppercase tracking-widest text-[9px]">Middle-Screen Operational Alert Banner</label>
+                  <label className="relative inline-flex items-center cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={bannerEnabledState}
+                      onChange={(e) => setBannerEnabledState(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-600"></div>
+                    <span className="ml-2 text-[10px] font-bold text-gray-500">{bannerEnabledState ? "ENABLED" : "DISABLED"}</span>
+                  </label>
+                </div>
+                <textarea
+                  rows={3}
+                  value={bannerTextState}
+                  onChange={(e) => setBannerTextState(e.target.value)}
+                  placeholder="e.g. 📢 Sandbox Governance Mode: Verify receipts and upgrade membership tiers via owner controls."
+                  className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-2.5 px-3.5 text-xs focus:outline-none focus:border-[#D4AF37] resize-none"
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={handleSaveContentHub}
+              className="w-full py-3 bg-[#1A1C20] hover:bg-[#D4AF37] hover:text-black text-white font-bold tracking-wider text-xs uppercase rounded-xl transition-all shadow-sm cursor-pointer"
+            >
+              Deploy Global Tickers &amp; Banners
+            </button>
+          </div>
+        )}
+
+        {/* TAB 7: IMMUTABLE AUDIT LOGS */}
+        {activeTab === "logs" && (
+          <div className="bg-white border border-[#E5E1D8] rounded-3xl p-6 shadow-sm space-y-6 animate-fade-in">
+            <div className="border-b border-[#E5E1D8]/60 pb-4">
+              <h3 className="text-base font-serif font-black text-[#1A1A1A] tracking-tight">System Security Audits</h3>
+              <p className="text-xs text-gray-500 mt-1">Immutable log timeline of all administrative operations performed on the Yarana registry engine.</p>
+            </div>
+
+            {/* Audit Logs Table */}
+            <div className="overflow-x-auto border border-[#E5E1D8]/60 rounded-2xl max-h-[500px]">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-[#F9F8F6] border-b border-[#E5E1D8] font-mono text-gray-400 uppercase text-[9px] font-bold">
+                    <th className="py-3 px-4">Timestamp</th>
+                    <th className="py-3 px-4">Event Operation</th>
+                    <th className="py-3 px-4">Audit Description</th>
+                    <th className="py-3 px-4">Administrator Key</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#E5E1D8]/40 font-mono text-[11px]">
+                  {(appSettings.adminLogs || []).map((log: any) => (
+                    <tr key={log.id} className="hover:bg-gray-50/30">
+                      <td className="py-3 px-4 text-gray-400 font-bold">
+                        {new Date(log.timestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'medium' })}
+                      </td>
+                      <td className="py-3 px-4 text-indigo-700 font-bold">{log.title}</td>
+                      <td className="py-3 px-4 text-gray-600 font-sans leading-normal">{log.details}</td>
+                      <td className="py-3 px-4 text-gray-400 italic">{log.ip}</td>
+                    </tr>
+                  ))}
+                  {(!appSettings.adminLogs || appSettings.adminLogs.length === 0) && (
+                    <tr>
+                      <td colSpan={4} className="py-6 text-center text-gray-400">No security audit logs recorded.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+      </div>
+
+      {/* --- DRAWERS / MODALS / LIGHTBOXES OVERLAYS --- */}
+      <AnimatePresence>
+        
+        {/* MODAL: USER DETAIL VIEWER */}
+        {selectedUserDetail && (
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-lg border border-[#E5E1D8]"
+            >
+              <div className="p-6 border-b border-[#E5E1D8] flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <img src={selectedUserDetail.avatar} alt="avatar" className="w-10 h-10 rounded-full object-cover" />
+                  <div className="text-left">
+                    <h3 className="text-sm font-serif font-black text-gray-900 leading-none">{selectedUserDetail.name}</h3>
+                    <p className="text-[10px] text-gray-400 mt-1">{selectedUserDetail.email}</p>
+                  </div>
+                </div>
+                <button onClick={() => setSelectedUserDetail(null)} className="p-1 rounded-full hover:bg-gray-100 cursor-pointer">
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-6 max-h-[400px] overflow-y-auto text-xs text-left">
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest font-mono">Location City</p>
+                    <p className="text-sm font-bold text-gray-800 mt-1">{selectedUserDetail.city}</p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest font-mono">Phone Number</p>
+                    <p className="text-sm font-bold text-gray-800 mt-1 font-mono">{selectedUserDetail.phone}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest font-mono">Platform Transaction History</p>
+                  <div className="border border-[#E5E1D8] rounded-xl overflow-hidden divide-y divide-[#E5E1D8]/40">
+                    {paymentRequests
+                      .filter(p => p.userEmail === selectedUserDetail.email)
+                      .map(p => (
+                        <div key={p.id} className="p-3 bg-gray-50/50 flex justify-between items-center">
+                          <div>
+                            <p className="font-bold text-gray-800">{p.serviceName}</p>
+                            <p className="text-[9px] text-gray-400 font-mono">ID: {p.transactionId}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-mono font-bold text-indigo-700">{p.totalPrice.toLocaleString()} PKR</p>
+                            <span className="text-[8px] font-mono uppercase text-gray-400 font-bold">{p.status}</span>
+                          </div>
+                        </div>
+                      ))}
+                    {paymentRequests.filter(p => p.userEmail === selectedUserDetail.email).length === 0 && (
+                      <p className="p-4 text-center text-gray-400 italic">No manual transaction slips registered.</p>
+                    )}
+                  </div>
+                </div>
+
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* MODAL: COMPANION PROFILE EDITOR */}
+        {editingCompanion && (
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl max-w-xl w-full overflow-hidden shadow-lg border border-[#E5E1D8] text-left"
+            >
+              <div className="p-5 border-b border-[#E5E1D8] flex justify-between items-center">
+                <h3 className="text-sm font-serif font-black text-gray-900">Edit Companion Profile Attributes</h3>
+                <button onClick={() => setEditingCompanion(null)} className="p-1 rounded-full hover:bg-gray-100 cursor-pointer">
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4 max-h-[480px] overflow-y-auto text-xs">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="font-bold text-gray-400 uppercase tracking-widest text-[9px]">Display Name</label>
+                    <input
+                      type="text"
+                      value={editingCompanion.name}
+                      onChange={(e) => setEditingCompanion({ ...editingCompanion, name: e.target.value })}
+                      className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-2 px-3 text-gray-800"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="font-bold text-gray-400 uppercase tracking-widest text-[9px]">Age (18-40)</label>
+                    <input
+                      type="number"
+                      value={editingCompanion.age}
+                      onChange={(e) => setEditingCompanion({ ...editingCompanion, age: Number(e.target.value) })}
+                      className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-2 px-3 text-gray-800"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="font-bold text-gray-400 uppercase tracking-widest text-[9px]">City</label>
+                    <select
+                      value={editingCompanion.city}
+                      onChange={(e) => setEditingCompanion({ ...editingCompanion, city: e.target.value as any })}
+                      className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-2 px-3 text-gray-800"
+                    >
+                      {PAKISTAN_CITIES.map(city => (
+                        <option key={city} value={city}>{city}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="font-bold text-gray-400 uppercase tracking-widest text-[9px]">Membership Pricing Tier</label>
+                    <select
+                      value={editingCompanion.pricingTier}
+                      onChange={(e) => setEditingCompanion({ ...editingCompanion, pricingTier: e.target.value as any })}
+                      className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-2 px-3 text-gray-800"
+                    >
+                      <option value="Silver">Silver Tier (1.0x)</option>
+                      <option value="Gold">Gold Tier (Premium 1.30x)</option>
+                      <option value="Platinum">Platinum Tier (VVIP 2.21x)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-gray-400 uppercase tracking-widest text-[9px]">Tagline / Slogan</label>
+                  <input
+                    type="text"
+                    value={editingCompanion.tagline || ""}
+                    onChange={(e) => setEditingCompanion({ ...editingCompanion, tagline: e.target.value })}
+                    className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-2 px-3 text-gray-800"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-gray-400 uppercase tracking-widest text-[9px]">Biography</label>
+                  <textarea
+                    rows={3}
+                    value={editingCompanion.bio}
+                    onChange={(e) => setEditingCompanion({ ...editingCompanion, bio: e.target.value })}
+                    className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-2 px-3 text-gray-800 resize-none"
+                  />
+                </div>
+
+                <button
+                  onClick={async () => {
+                    await onEditCompanionProfile(editingCompanion.id, editingCompanion);
+                    setEditingCompanion(null);
+                    displaySuccess("Companion catalog registry synchronized successfully!");
+                  }}
+                  className="w-full py-3 bg-[#1A1C20] hover:bg-[#D4AF37] hover:text-black text-white font-bold tracking-wider text-xs uppercase rounded-xl transition-all shadow-sm cursor-pointer"
+                >
+                  Save Profile Attributes
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* MODAL: PAYMENT DETAIL AUDIT DRAWER */}
+        {selectedPaymentDetail && (
+          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-end">
+            <motion.div
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              className="bg-white w-full max-w-md h-screen p-6 overflow-y-auto shadow-2xl flex flex-col justify-between border-l border-[#E5E1D8]"
+            >
+              <div className="space-y-6 text-xs text-left">
+                <div className="flex justify-between items-center border-b border-gray-100 pb-4">
+                  <div>
+                    <h3 className="text-base font-serif font-black text-gray-900">Manual Billing Audit</h3>
+                    <p className="text-[10px] text-gray-400 mt-1 uppercase font-mono tracking-wider font-semibold">REF: {selectedPaymentDetail.transactionId}</p>
+                  </div>
+                  <button onClick={() => setSelectedPaymentDetail(null)} className="p-1.5 rounded-full hover:bg-gray-100 cursor-pointer">
+                    <X className="w-5 h-5 text-gray-500" />
+                  </button>
+                </div>
+
+                {/* Audit details card */}
+                {(() => {
+                  const extended = parsePaymentNote(selectedPaymentDetail.paymentNote);
+                  return (
+                    <div className="space-y-5">
+                      <div className="bg-[#F3F0E9]/30 border border-[#E5E1D8]/60 p-4 rounded-2xl space-y-2">
+                        <div className="flex justify-between border-b border-gray-100 pb-2">
+                          <span className="text-gray-400 font-bold uppercase tracking-wider text-[8px] font-mono">Service Rendered</span>
+                          <span className="font-bold text-gray-900">{selectedPaymentDetail.serviceName}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-gray-100 pb-2">
+                          <span className="text-gray-400 font-bold uppercase tracking-wider text-[8px] font-mono">Verification Slips</span>
+                          <span className="font-extrabold text-orange-600 font-mono">{selectedPaymentDetail.totalPrice.toLocaleString()} PKR</span>
+                        </div>
+                        <div className="flex justify-between border-b border-gray-100 pb-2">
+                          <span className="text-gray-400 font-bold uppercase tracking-wider text-[8px] font-mono">Sender Name</span>
+                          <span className="font-bold text-gray-900">{extended.senderName || "Not specified"}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-gray-100 pb-2">
+                          <span className="text-gray-400 font-bold uppercase tracking-wider text-[8px] font-mono">Sending Account #</span>
+                          <span className="font-mono font-bold text-gray-800">{extended.senderAccountNumber || "Not specified"}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-gray-100 pb-2">
+                          <span className="text-gray-400 font-bold uppercase tracking-wider text-[8px] font-mono">Ledger Transaction ID</span>
+                          <span className="font-mono font-bold text-indigo-700">{selectedPaymentDetail.transactionId}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-gray-100 pb-2">
+                          <span className="text-gray-400 font-bold uppercase tracking-wider text-[8px] font-mono">Sending Last 4 Digits</span>
+                          <span className="font-mono font-bold text-gray-900">*{selectedPaymentDetail.lastFour}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400 font-bold uppercase tracking-wider text-[8px] font-mono">Billing Timestamp</span>
+                          <span className="font-mono text-gray-500">{extended.paymentDateTime || "Not specified"}</span>
+                        </div>
+                      </div>
+
+                      {/* Display slip screenshot with lightbox click */}
+                      {extended.screenshotUrl && (
+                        <div className="space-y-1.5">
+                          <p className="font-bold text-gray-400 uppercase tracking-widest text-[9px]">Attached Screenshot Proof</p>
+                          <div
+                            onClick={async () => {
+                              // Retrieve storage path or full signed URL dynamically
+                              let url = extended.screenshotUrl;
+                              if (url && !url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("data:")) {
+                                const { data: signedData } = await supabase.storage
+                                  .from("app-files")
+                                  .createSignedUrl(url, 3600);
+                                if (signedData) url = signedData.signedUrl;
+                              }
+                              setEnlargedScreenshot(url);
+                            }}
+                            className="relative border border-[#E5E1D8] rounded-2xl overflow-hidden aspect-video bg-gray-50 hover:opacity-90 transition-opacity cursor-pointer group shadow-sm"
+                          >
+                            <img
+                              src={extended.screenshotUrl.startsWith("http") ? extended.screenshotUrl : `https://ayypyoczarvufsmolfqx.supabase.co/storage/v1/object/public/app-files/${extended.screenshotUrl}`}
+                              alt="Manual Billing slip"
+                              className="w-full h-full object-cover"
+                            />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white gap-2 font-bold text-xs">
+                              <Eye className="w-4 h-4" />
+                              <span>Click to Zoom Proof</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Optional note */}
+                      {extended.note && (
+                        <div className="space-y-1 bg-[#F9F8F6] p-3 rounded-xl border border-[#E5E1D8]/60">
+                          <p className="font-bold text-gray-400 uppercase tracking-widest text-[8px]">Client Billing Comment</p>
+                          <p className="text-gray-700 leading-normal italic font-medium">"{extended.note}"</p>
+                        </div>
+                      )}
+
+                      {/* Administrator Notes block */}
+                      <div className="space-y-1">
+                        <label className="font-bold text-gray-400 uppercase tracking-widest text-[9px] block">Administrator Verification Notes</label>
+                        <textarea
+                          rows={2}
+                          placeholder="e.g. Verified matched on Bank Alfalah portal. Ledger matches transaction total."
+                          value={adminReviewNote}
+                          onChange={(e) => setAdminReviewNote(e.target.value)}
+                          className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-2 px-3 text-xs focus:outline-none resize-none"
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Approve/Reject Controls */}
+              {selectedPaymentDetail.status === "Pending" ? (
+                <div className="grid grid-cols-2 gap-3.5 border-t border-gray-100 pt-4 mt-6">
+                  <button
+                    onClick={async () => {
+                      // Compile notes and update request note json
+                      const extended = parsePaymentNote(selectedPaymentDetail.paymentNote);
+                      extended.adminNote = adminReviewNote;
+                      const serialized = JSON.stringify(extended);
+
+                      await onApprovePayment(selectedPaymentDetail.id, adminReviewNote);
+                      
+                      // Also update note column on the request row in DB manually for complete logging
+                      await supabase.from("payment_requests").update({ payment_note: serialized }).eq("id", selectedPaymentDetail.id);
+
+                      setSelectedPaymentDetail(null);
+                      displaySuccess("Payment transaction cleared! Booking has been unlocked for the member.");
+                    }}
+                    className="w-full py-3.5 bg-green-600 hover:bg-green-700 text-white font-bold tracking-wider text-xs uppercase rounded-xl cursor-pointer transition-all flex items-center justify-center gap-2"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>Clear Slip</span>
+                  </button>
+                  <button
+                    onClick={async () => {
+                      const extended = parsePaymentNote(selectedPaymentDetail.paymentNote);
+                      extended.adminNote = adminReviewNote;
+                      const serialized = JSON.stringify(extended);
+
+                      await onRejectPayment(selectedPaymentDetail.id, adminReviewNote);
+                      await supabase.from("payment_requests").update({ payment_note: serialized }).eq("id", selectedPaymentDetail.id);
+
+                      setSelectedPaymentDetail(null);
+                      displayError("Billing transaction flagged and rejected.");
+                    }}
+                    className="w-full py-3.5 bg-red-650 hover:bg-red-700 text-white font-bold tracking-wider text-xs uppercase rounded-xl cursor-pointer transition-all flex items-center justify-center gap-2"
+                  >
+                    <X className="w-4 h-4" />
+                    <span>Flag &amp; Reject</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="border-t border-gray-100 pt-4 mt-6 text-center text-xs text-gray-400 font-mono italic">
+                  This transaction has already been resolved and locked ({selectedPaymentDetail.status}).
+                </div>
+              )}
+            </motion.div>
+          </div>
+        )}
+
+        {/* LIGHTBOX SCREENSHOT PREVIEW */}
+        {enlargedScreenshot && (
+          <div
+            onClick={() => setEnlargedScreenshot(null)}
+            className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md flex items-center justify-center p-4 cursor-zoom-out"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative max-w-4xl w-full h-full max-h-[80vh] flex items-center justify-center"
+            >
+              <img
+                src={enlargedScreenshot}
+                alt="Enlarged transaction proof slip"
+                className="max-w-full max-h-full object-contain rounded-2xl shadow-2xl border border-white/10"
+              />
+              <button
+                onClick={() => setEnlargedScreenshot(null)}
+                className="absolute top-4 right-4 p-2 rounded-full bg-black/60 text-white hover:bg-white hover:text-black transition-colors cursor-pointer"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </motion.div>
+          </div>
+        )}
+
+      </AnimatePresence>
 
     </div>
   );

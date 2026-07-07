@@ -12,7 +12,7 @@ import SafetyPage from "./components/SafetyPage";
 import AdminPanel from "./components/AdminPanel";
 import RoleSelectionPage from "./components/RoleSelectionPage";
 import CompanionWorkspace from "./components/CompanionWorkspace";
-import { Companion, Booking, Review, UserProfile, CompanionStatus, PaymentRequest } from "./types";
+import { Companion, Booking, Review, UserProfile, CompanionStatus, PaymentRequest, PricingTier, parsePaymentNote, stringifyPaymentNote } from "./types";
 import { INITIAL_COMPANIONS } from "./data/companions";
 // @ts-ignore
 import { supabase } from "./supabaseClient";
@@ -230,6 +230,19 @@ export default function App() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [paymentRequests, setPaymentRequests] = useState<PaymentRequest[]>([]);
+  const [allProfiles, setAllProfiles] = useState<UserProfile[]>([]);
+  const [appSettings, setAppSettings] = useState({
+    announcement: "✨ Welcome to Yarana.pk - Pakistan's #1 Safe and Verified Companionship Platform!",
+    bannerEnabled: true,
+    bannerText: "📢 Sandbox Demo Mode: Book companions and audit bookings through the Governance Center.",
+    silverMultiplier: 1.0,
+    goldMultiplier: 1.3,
+    platinumMultiplier: 2.21,
+    membershipSilverFee: 0,
+    membershipGoldFee: 4999,
+    membershipPlatinumFee: 9999,
+    adminLogs: [] as any[]
+  });
 
   // Navigation & Dialog states
   const [currentTab, setCurrentTab] = useState("browse");
@@ -407,6 +420,18 @@ export default function App() {
       
       // 4. Fetch Payment Requests from Supabase
       await loadPaymentRequests(currentProfile, userId);
+
+      // 5. Fetch all profiles if owner admin
+      if (currentProfile && currentProfile.email.toLowerCase() === "komailali116@gmail.com") {
+        try {
+          const { data: dbProfiles, error: profError } = await supabase.from("profiles").select("*");
+          if (!profError && dbProfiles) {
+            setAllProfiles(dbProfiles.map(mapProfileFromDB));
+          }
+        } catch (pe) {
+          console.error("Failed to load all user profiles for admin dashboard:", pe);
+        }
+      }
     } catch (err) {
       console.error("Failed to load data from Supabase, falling back to offline seeds:", err);
       setCompanions(getStoredCompanions());
@@ -416,9 +441,198 @@ export default function App() {
     }
   };
 
+  // Admin Logs & System Settings Governance Flow
+  const loadGlobalSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", "00000000-0000-0000-0000-000000000000")
+        .maybeSingle();
+
+      if (data && data.avatar) {
+        const parsed = JSON.parse(data.avatar);
+        setAppSettings(prev => {
+          const merged = { ...prev, ...parsed };
+          // Sync multipliers immediately to local storage so pricing calculations updates instantly!
+          localStorage.setItem("yarana_multipliers", JSON.stringify({
+            silver: merged.silverMultiplier,
+            gold: merged.goldMultiplier,
+            platinum: merged.platinumMultiplier
+          }));
+          return merged;
+        });
+      } else {
+        // Create special system settings row if it doesn't exist
+        const defaultSettings = {
+          announcement: "✨ Welcome to Yarana.pk - Pakistan's #1 Safe and Verified Companionship Platform!",
+          bannerEnabled: true,
+          bannerText: "📢 Sandbox Demo Mode: Book companions and audit bookings through the Governance Center.",
+          silverMultiplier: 1.0,
+          goldMultiplier: 1.3,
+          platinumMultiplier: 2.21,
+          membershipSilverFee: 0,
+          membershipGoldFee: 4999,
+          membershipPlatinumFee: 9999,
+          adminLogs: [
+            { id: "log_1", timestamp: new Date().toISOString(), title: "Governance Booted", details: "Initial security baseline established", ip: "System Kernel" }
+          ]
+        };
+        await supabase.from("profiles").insert({
+          id: "00000000-0000-0000-0000-000000000000",
+          name: "System Settings",
+          email: "settings@yarana.pk",
+          avatar: JSON.stringify(defaultSettings),
+          is_admin: true,
+          phone: "SYSTEM",
+          city: "SYSTEM"
+        });
+      }
+    } catch (err) {
+      console.error("Failed to load global settings:", err);
+    }
+  };
+
+  const handleUpdateSettings = async (newSettings: any) => {
+    setAppSettings(newSettings);
+    localStorage.setItem("yarana_multipliers", JSON.stringify({
+      silver: newSettings.silverMultiplier,
+      gold: newSettings.goldMultiplier,
+      platinum: newSettings.platinumMultiplier
+    }));
+
+    try {
+      await supabase.from("profiles").upsert({
+        id: "00000000-0000-0000-0000-000000000000",
+        name: "System Settings",
+        email: "settings@yarana.pk",
+        avatar: JSON.stringify(newSettings),
+        is_admin: true,
+        phone: "SYSTEM",
+        city: "SYSTEM",
+        updated_at: new Date().toISOString()
+      });
+      await logAdminAction("Settings Modified", "Updated system multipliers or announcement banners");
+    } catch (err) {
+      console.error("Failed to save global settings:", err);
+    }
+  };
+
+  const logAdminAction = async (title: string, details: string) => {
+    const newLog = {
+      id: "log_" + Date.now(),
+      timestamp: new Date().toISOString(),
+      title,
+      details,
+      ip: user?.email || "komailali116@gmail.com"
+    };
+
+    setAppSettings(prev => {
+      const updatedLogs = [newLog, ...(prev.adminLogs || [])];
+      const updatedSettings = { ...prev, adminLogs: updatedLogs };
+
+      // Async write to DB
+      supabase.from("profiles").upsert({
+        id: "00000000-0000-0000-0000-000000000000",
+        name: "System Settings",
+        email: "settings@yarana.pk",
+        avatar: JSON.stringify(updatedSettings),
+        is_admin: true,
+        phone: "SYSTEM",
+        city: "SYSTEM",
+        updated_at: new Date().toISOString()
+      }).then(({ error }) => {
+        if (error) console.error("Async log write failed:", error);
+      });
+
+      return updatedSettings;
+    });
+  };
+
+  const handleSuspendUser = async (targetUserId: string, isSuspended: boolean) => {
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ selected_role: isSuspended ? "suspended" : "client" })
+        .eq("id", targetUserId);
+
+      if (error) throw error;
+
+      await logAdminAction(isSuspended ? "User Suspended" : "User Reactivated", `Modified account state for profile ID: ${targetUserId}`);
+
+      // Reload profiles list
+      const { data: dbProfiles } = await supabase.from("profiles").select("*");
+      if (dbProfiles) {
+        setAllProfiles(dbProfiles.map(mapProfileFromDB));
+      }
+    } catch (err) {
+      console.error("Failed to suspend user:", err);
+      alert("Error updating user status: " + (err as any).message);
+    }
+  };
+
+  const handleDeleteUser = async (targetUserId: string) => {
+    if (!window.confirm("CRITICAL WARNING: Are you absolutely sure you want to delete this user profile? All review history and bookings will be wiped. This action is permanent and irreversible.")) {
+      return;
+    }
+    try {
+      await supabase.from("reviews").delete().eq("user_id", targetUserId);
+      await supabase.from("bookings").delete().eq("user_id", targetUserId);
+      const { error } = await supabase.from("profiles").delete().eq("id", targetUserId);
+
+      if (error) throw error;
+
+      await logAdminAction("User Deleted", `Permanently dropped profile record: ${targetUserId}`);
+
+      // Reload profiles list
+      const { data: dbProfiles } = await supabase.from("profiles").select("*");
+      if (dbProfiles) {
+        setAllProfiles(dbProfiles.map(mapProfileFromDB));
+      }
+    } catch (err) {
+      console.error("Failed to delete user profile:", err);
+      alert("Error dropping user profile: " + (err as any).message);
+    }
+  };
+
+  const handleEditCompanionProfile = async (id: string, updatedFields: Partial<Companion>) => {
+    const updated = companions.map(c => c.id === id ? { ...c, ...updatedFields } : c);
+    setCompanions(updated);
+    saveStoredCompanions(updated);
+
+    try {
+      const { data } = await supabase.from("companions").select("*").eq("id", id).maybeSingle();
+      if (data) {
+        let rawTagline = `[Tier:${updatedFields.pricingTier || data.tagline?.match(/\[Tier:(\w+)\]/)?.[1] || "Silver"}]`;
+        if (updatedFields.photos) {
+          rawTagline += ` [Photos:${JSON.stringify(updatedFields.photos)}]`;
+        }
+        const cleanTag = (updatedFields.tagline || data.tagline || "").replace(/\[Tier:\w+\]|\[Photos:\[.*?\]\]/g, "").trim();
+        if (cleanTag) {
+          rawTagline += ` ${cleanTag}`;
+        }
+
+        const { error } = await supabase.from("companions").update({
+          name: updatedFields.name || data.name,
+          age: updatedFields.age !== undefined ? updatedFields.age : data.age,
+          city: updatedFields.city || data.city,
+          bio: updatedFields.bio || data.bio,
+          tagline: rawTagline,
+          is_online: updatedFields.isOnline !== undefined ? updatedFields.isOnline : data.is_online,
+        }).eq("id", id);
+
+        if (error) throw error;
+        await logAdminAction("Companion Edited", `Modified profile attributes for companion: ${id}`);
+      }
+    } catch (err) {
+      console.error("Failed to edit companion profile in DB:", err);
+    }
+  };
+
   // Initial Session Checking and Data Synchronization
   useEffect(() => {
     const checkSupabaseSession = async () => {
+      await loadGlobalSettings();
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         setUser(null);
@@ -993,6 +1207,29 @@ export default function App() {
             setCurrentTab("browse");
           }
         }} />
+      ) : user.selectedRole === "suspended" ? (
+        <div className="min-h-screen bg-[#F9F8F6] text-[#2D2D2D] font-sans flex flex-col justify-center items-center p-6 text-center space-y-6" id="suspension-overlay">
+          <div className="p-5 bg-red-50 border border-red-150 rounded-full text-red-650 shadow-sm animate-pulse">
+            <ShieldAlert className="w-12 h-12" />
+          </div>
+          <div className="space-y-2 max-w-md">
+            <h2 className="text-2xl font-serif font-black text-gray-900 tracking-tight">Account Suspended</h2>
+            <p className="text-sm text-gray-500 leading-relaxed">
+              Your Yarana member profile has been suspended by administrators due to safety policy violations or transaction anomalies.
+            </p>
+          </div>
+          <div className="p-4 bg-white border border-[#E5E1D8] rounded-2xl max-w-sm w-full text-xs text-left text-gray-500 font-mono space-y-1">
+            <p><span className="font-bold text-gray-700">Member:</span> {user.name}</p>
+            <p><span className="font-bold text-gray-700">Email:</span> {user.email}</p>
+            <p><span className="font-bold text-gray-700">Status:</span> <span className="text-red-600 font-bold">Immutable Suspended</span></p>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="px-6 py-2.5 bg-[#1A1C20] text-white hover:bg-[#D4AF37] hover:text-black font-semibold text-xs uppercase tracking-widest rounded-xl transition-all cursor-pointer"
+          >
+            Logout and Exit
+          </button>
+        </div>
       ) : !user.selectedRole && !user.isAdmin ? (
         <RoleSelectionPage
           user={user}
@@ -1001,6 +1238,14 @@ export default function App() {
         />
       ) : (
         <>
+          {/* Top Global Announcement Bar */}
+          {appSettings.announcement && (
+            <div className="bg-[#1A1C20] text-white py-2 px-4 text-center text-[11px] font-medium tracking-wide flex items-center justify-center gap-2 border-b border-[#D4AF37]/20 select-none animate-fade-in" id="global-announcement">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 animate-ping shrink-0" />
+              <span>{appSettings.announcement}</span>
+            </div>
+          )}
+
           {/* Main Top Navigation */}
           <Navbar
             currentTab={currentTab}
@@ -1011,6 +1256,16 @@ export default function App() {
             onResetApp={handleResetApp}
             onSwitchRole={handleSwitchRole}
           />
+
+          {/* Global Alert Banner */}
+          {appSettings.bannerEnabled && appSettings.bannerText && (
+            <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 mt-4 animate-fade-in" id="global-alert-banner">
+              <div className="bg-amber-50 border border-[#D4AF37]/30 text-[#856404] px-4 py-3 rounded-2xl text-[11px] flex items-center gap-3 shadow-sm font-medium">
+                <span className="p-1 rounded-full bg-[#D4AF37]/10 text-[#D4AF37]">📢</span>
+                <span className="flex-grow">{appSettings.bannerText}</span>
+              </div>
+            </div>
+          )}
 
           {/* Master Content Stage */}
           <main className="flex-grow max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
@@ -1097,6 +1352,13 @@ export default function App() {
                   onUpdateCompanionTier={handleUpdateCompanionTier}
                   onApprovePayment={handleApprovePayment}
                   onRejectPayment={handleRejectPayment}
+                  user={user}
+                  allProfiles={allProfiles}
+                  appSettings={appSettings}
+                  onUpdateSettings={handleUpdateSettings}
+                  onSuspendUser={handleSuspendUser}
+                  onDeleteUser={handleDeleteUser}
+                  onEditCompanionProfile={handleEditCompanionProfile}
                 />
               )}
             </div>

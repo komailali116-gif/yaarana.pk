@@ -141,7 +141,7 @@ export interface UserProfile {
   city: string;
   avatar: string;
   isAdmin: boolean;
-  selectedRole?: "client" | "companion";
+  selectedRole?: "client" | "companion" | "suspended";
 }
 
 export interface PaymentRequest {
@@ -165,4 +165,48 @@ export interface PaymentRequest {
   status: "Pending" | "Approved" | "Rejected";
   createdAt: string;
   userEmail?: string;
+  senderName?: string;
+  senderAccountNumber?: string;
+  paymentDateTime?: string;
+  screenshotUrl?: string;
+  adminNote?: string;
+}
+
+export function stringifyPaymentNote(data: {
+  note?: string;
+  senderName?: string;
+  senderAccountNumber?: string;
+  paymentDateTime?: string;
+  screenshotUrl?: string;
+  adminNote?: string;
+}): string {
+  return JSON.stringify({
+    note: data.note || "",
+    senderName: data.senderName || "",
+    senderAccountNumber: data.senderAccountNumber || "",
+    paymentDateTime: data.paymentDateTime || "",
+    screenshotUrl: data.screenshotUrl || "",
+    adminNote: data.adminNote || "",
+  });
+}
+
+export function parsePaymentNote(rawNote: string | null | undefined) {
+  const defaultVal = {
+    note: rawNote || "",
+    senderName: "",
+    senderAccountNumber: "",
+    paymentDateTime: "",
+    screenshotUrl: "",
+    adminNote: "",
+  };
+  if (!rawNote) return defaultVal;
+  const trimmed = rawNote.trim();
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    try {
+      return { ...defaultVal, ...JSON.parse(trimmed) };
+    } catch (e) {
+      // fallback
+    }
+  }
+  return defaultVal;
 }
