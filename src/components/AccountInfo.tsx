@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { UserProfile, Booking, PaymentRequest } from "../types";
 import { User, Wallet, Phone, Mail, MapPin, Edit3, Save, Calendar, Clock, Star, AlertCircle, CheckCircle2, CreditCard } from "lucide-react";
+import { SafeImage } from "./SafeImage";
 
 interface AccountInfoProps {
   profile: UserProfile;
@@ -84,11 +85,13 @@ export default function AccountInfo({
       <div className="space-y-6 lg:col-span-1">
         <div className="bg-white border border-[#E5E1D8] rounded-3xl p-6 shadow-sm text-center space-y-4">
           <div className="relative inline-block">
-            <img
+            <SafeImage
               src={profile.avatar}
               alt={profile.name}
               referrerPolicy="no-referrer"
-              className="w-24 h-24 rounded-full object-cover mx-auto border-4 border-[#D4AF37] shadow-sm"
+              fallbackType="avatar"
+              wrapperClassName="w-24 h-24 rounded-full border-4 border-[#D4AF37] shadow-sm mx-auto"
+              className="w-full h-full object-cover"
             />
             <span className="absolute bottom-1 right-1 p-2 rounded-full bg-[#1A1C20] text-[#D4AF37] shadow-sm">
               <User className="w-3.5 h-3.5" />
@@ -388,11 +391,13 @@ export default function AccountInfo({
                   {/* Left part: Companion & Service info */}
                   <div className="flex-grow">
                     <div className="flex items-center gap-3">
-                      <img
+                      <SafeImage
                         src={booking.companionAvatar}
                         alt={booking.companionName}
                         referrerPolicy="no-referrer"
-                        className="w-11 h-11 rounded-full object-cover border border-[#E5E1D8]"
+                        fallbackType="Other"
+                        wrapperClassName="w-11 h-11 rounded-full border border-[#E5E1D8]"
+                        className="w-full h-full object-cover"
                       />
                       <div className="text-left space-y-0.5">
                         <p className="text-[10px] font-bold text-[#D4AF37] uppercase tracking-wider leading-none">{booking.serviceName}</p>

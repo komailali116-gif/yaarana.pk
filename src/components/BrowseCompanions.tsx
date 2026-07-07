@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Companion, CompanionGender, CompanionStatus, Service, PAKISTAN_CITIES } from "../types";
 import { Search, MapPin, Star, Sparkles, Filter, CheckCircle2, Moon, Utensils, Film, PhoneCall, Sun, Compass, BookOpen, ArrowLeft, Award } from "lucide-react";
 import { SERVICES, getTierMultiplier } from "../data/services";
+import { SafeImage } from "./SafeImage";
 
 interface BrowseCompanionsProps {
   companions: Companion[];
@@ -451,10 +452,11 @@ export default function BrowseCompanions({
             >
               {/* Card Head / Avatar Section */}
               <div className="relative h-64 w-full bg-gray-100 overflow-hidden">
-                <img
+                <SafeImage
                   src={comp.avatar}
                   alt={comp.name}
                   referrerPolicy="no-referrer"
+                  fallbackType={comp.gender as any}
                   className="w-full h-full object-cover group-hover:scale-[1.03] transition-all duration-500"
                 />
                 

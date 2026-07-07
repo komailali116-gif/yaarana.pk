@@ -3,6 +3,7 @@ import {
   Sparkles, Shield, User, Wallet, ShieldAlert, CalendarRange, 
   HeartHandshake, LogOut, RefreshCw, Briefcase, Eye 
 } from "lucide-react";
+import { SafeImage } from "./SafeImage";
 
 interface NavbarProps {
   currentTab: string;
@@ -180,11 +181,13 @@ export default function Navbar({
               className="flex items-center gap-2 cursor-pointer bg-[#F3F0E9] hover:bg-[#E5E1D8]/40 transition-all px-3 py-1.5 rounded-full border border-[#E5E1D8]"
               id="nav-avatar-trigger"
             >
-              <img 
+              <SafeImage 
                 src={profile.avatar} 
                 alt={profile.name} 
                 referrerPolicy="no-referrer"
-                className="w-7 h-7 rounded-full object-cover border border-white"
+                fallbackType="avatar"
+                wrapperClassName="w-7 h-7 rounded-full border border-white"
+                className="w-full h-full object-cover"
               />
               <div className="hidden lg:block text-right pr-0.5">
                 <p className="text-[10px] font-bold uppercase text-gray-400 leading-none">

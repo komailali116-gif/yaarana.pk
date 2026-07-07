@@ -3,6 +3,7 @@ import { Companion, Service, Review, Booking } from "../types";
 import { SERVICES, calculatePrice, getTierMultiplier } from "../data/services";
 import { getStoredReviews } from "../lib/storage";
 import { X, Star, Calendar, Clock, Sparkles, MapPin, Check, BookOpen, AlertCircle, HeartHandshake, ShieldCheck, Utensils, Film, PhoneCall, Sun, Compass, Moon, ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
+import { SafeImage } from "./SafeImage";
 
 interface CompanionDetailModalProps {
   companion: Companion;
@@ -299,11 +300,13 @@ export default function CompanionDetailModal({
           
           {/* Cover & Avatar Header */}
           <div className="flex flex-col sm:flex-row gap-5 items-start sm:items-center">
-            <img
+            <SafeImage
               src={companion.avatar}
               alt={companion.name}
               referrerPolicy="no-referrer"
-              className="w-24 h-24 sm:w-28 sm:h-28 rounded-full object-cover border-4 border-[#D4AF37] shadow-sm"
+              fallbackType={companion.gender as any}
+              wrapperClassName="w-24 h-24 sm:w-28 sm:h-28 rounded-full border-4 border-[#D4AF37] shadow-sm"
+              className="w-full h-full object-cover"
             />
             <div className="space-y-1">
               <div className="flex flex-wrap items-center gap-2">
@@ -388,9 +391,10 @@ export default function CompanionDetailModal({
                     onClick={() => setZoomedPhoto(photo)}
                     className="relative aspect-square rounded-2xl overflow-hidden border border-[#E5E1D8] shadow-xs group bg-[#F9F8F6] cursor-pointer hover:border-[#D4AF37] transition-all"
                   >
-                    <img
+                    <SafeImage
                       src={photo}
                       alt={`${companion.name} portfolio photo ${idx + 1}`}
+                      fallbackType={companion.gender as any}
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                       referrerPolicy="no-referrer"
                     />
@@ -427,11 +431,13 @@ export default function CompanionDetailModal({
                   <div key={rev.id} className="p-4 rounded-2xl bg-[#F3F0E9]/10 border border-[#E5E1D8]/40 space-y-2.5 shadow-sm">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <img
+                        <SafeImage
                           src={rev.userAvatar}
                           alt={rev.userName}
                           referrerPolicy="no-referrer"
-                          className="w-7 h-7 rounded-full object-cover border border-[#E5E1D8]"
+                          fallbackType="avatar"
+                          wrapperClassName="w-7 h-7 rounded-full border border-[#E5E1D8]"
+                          className="w-full h-full object-cover"
                         />
                         <span className="text-xs font-semibold text-gray-800">{rev.userName}</span>
                       </div>
@@ -893,10 +899,11 @@ export default function CompanionDetailModal({
           >
             <X className="w-6 h-6" />
           </button>
-          <img 
+          <SafeImage 
             src={zoomedPhoto} 
             alt="Zoomed Portfolio Pic" 
-            className="max-w-full max-h-[90vh] object-contain rounded-2xl shadow-2xl border border-white/10"
+            wrapperClassName="max-w-full max-h-[90vh]"
+            className="w-full h-full object-contain rounded-2xl shadow-2xl border border-white/10"
             referrerPolicy="no-referrer"
           />
         </div>

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Smartphone, ShieldCheck, AlertTriangle, ArrowLeft, CheckCircle2, CreditCard, Building2, Copy, Check, Upload, Calendar, User, Eye } from "lucide-react";
 import { Companion, UserProfile, stringifyPaymentNote } from "../types";
 import { supabase } from "../supabaseClient";
+import { SafeImage } from "./SafeImage";
 
 interface PaymentPageProps {
   bookingDetail: {
@@ -250,11 +251,13 @@ export default function PaymentPage({
       {/* Booking summary header */}
       <div className="bg-[#F3F0E9]/30 border border-[#E5E1D8]/60 p-4 rounded-2xl flex items-center justify-between gap-4 shadow-sm">
         <div className="flex items-center gap-3">
-          <img
+          <SafeImage
             src={companion.avatar}
             alt={companion.name}
             referrerPolicy="no-referrer"
-            className="w-12 h-12 rounded-full object-cover border border-[#E5E1D8]"
+            fallbackType={companion.gender as any}
+            wrapperClassName="w-12 h-12 rounded-full border border-[#E5E1D8]"
+            className="w-full h-full object-cover"
           />
           <div className="text-left">
             <h4 className="text-[9px] font-bold text-[#D4AF37] uppercase tracking-wider leading-none">Booking Summary</h4>
@@ -475,10 +478,12 @@ export default function PaymentPage({
           {/* Screenshot preview if uploaded */}
           {screenshotPreview && (
             <div className="mt-2.5 relative border border-[#E5E1D8] rounded-2xl overflow-hidden aspect-video bg-gray-50 max-h-40 w-fit mx-auto">
-              <img
+              <SafeImage
                 src={screenshotPreview}
                 alt="Screenshot Preview"
-                className="h-full object-contain mx-auto"
+                fallbackType="document"
+                wrapperClassName="h-full mx-auto"
+                className="h-full object-contain"
               />
               <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[9px] font-bold px-2 py-1 rounded-md flex items-center gap-1 shadow-sm">
                 <Eye className="w-3 h-3" />

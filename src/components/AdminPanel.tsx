@@ -4,6 +4,7 @@ import { Companion, CompanionStatus, CompanionGender, Booking, PAKISTAN_CITIES, 
 import { SERVICES, INITIAL_SERVICES } from "../data/services";
 import { Shield, Users, Check, X, Sparkles, Plus, Trash2, ShieldAlert, Star, ListFilter, Upload, Award, Camera, Coins, Settings, Save, RefreshCw, Edit2, CreditCard, Search, Ban, Eye, FileText, CheckCircle2, TrendingUp, DollarSign, ArrowUpRight, Activity } from "lucide-react";
 import { supabase } from "../supabaseClient";
+import { SafeImage } from "./SafeImage";
 
 interface AdminPanelProps {
   companions: Companion[];
@@ -622,11 +623,13 @@ export default function AdminPanel({
                       return (
                         <tr key={member.email} className="hover:bg-gray-50/50 transition-colors">
                           <td className="py-3 px-4 flex items-center gap-3">
-                            <img
+                            <SafeImage
                               src={member.avatar}
                               alt={member.name}
                               referrerPolicy="no-referrer"
-                              className="w-9 h-9 rounded-full object-cover border border-gray-100"
+                              fallbackType="avatar"
+                              wrapperClassName="w-9 h-9 rounded-full border border-gray-100"
+                              className="w-full h-full object-cover"
                             />
                             <div className="text-left">
                               <p className="font-bold text-gray-900">{member.name}</p>
@@ -818,7 +821,7 @@ export default function AdminPanel({
                       <div key={idx} className="relative aspect-square border border-dashed border-[#E5E1D8] rounded-xl bg-gray-50 flex flex-col items-center justify-center overflow-hidden hover:bg-gray-100/50 hover:border-[#D4AF37] transition-all cursor-pointer">
                         {newCompPreviews[idx] ? (
                           <>
-                            <img src={newCompPreviews[idx]} alt="preview" className="w-full h-full object-cover" />
+                            <SafeImage src={newCompPreviews[idx]} alt="preview" className="w-full h-full object-cover" />
                             <button
                               type="button"
                               onClick={() => {
@@ -920,10 +923,12 @@ export default function AdminPanel({
                         return (
                           <tr key={companion.id} className="hover:bg-gray-50/50 transition-colors">
                             <td className="py-3 px-4 flex items-center gap-3">
-                              <img
+                              <SafeImage
                                 src={companion.avatar}
                                 alt={companion.name}
-                                className="w-10 h-10 rounded-full object-cover border border-gray-100"
+                                fallbackType={companion.gender as any}
+                                wrapperClassName="w-10 h-10 rounded-full border border-gray-100"
+                                className="w-full h-full object-cover"
                               />
                               <div className="text-left">
                                 <p className="font-bold text-gray-900">{companion.name}</p>
@@ -1404,7 +1409,7 @@ export default function AdminPanel({
             >
               <div className="p-6 border-b border-[#E5E1D8] flex justify-between items-center">
                 <div className="flex items-center gap-3">
-                  <img src={selectedUserDetail.avatar} alt="avatar" className="w-10 h-10 rounded-full object-cover" />
+                  <SafeImage src={selectedUserDetail.avatar} alt="avatar" fallbackType="avatar" wrapperClassName="w-10 h-10 rounded-full" className="w-full h-full object-cover" />
                   <div className="text-left">
                     <h3 className="text-sm font-serif font-black text-gray-900 leading-none">{selectedUserDetail.name}</h3>
                     <p className="text-[10px] text-gray-400 mt-1">{selectedUserDetail.email}</p>
@@ -1638,9 +1643,10 @@ export default function AdminPanel({
                             }}
                             className="relative border border-[#E5E1D8] rounded-2xl overflow-hidden aspect-video bg-gray-50 hover:opacity-90 transition-opacity cursor-pointer group shadow-sm"
                           >
-                            <img
-                              src={extended.screenshotUrl.startsWith("http") ? extended.screenshotUrl : `https://ayypyoczarvufsmolfqx.supabase.co/storage/v1/object/public/app-files/${extended.screenshotUrl}`}
+                            <SafeImage
+                              src={extended.screenshotUrl}
                               alt="Manual Billing slip"
+                              fallbackType="document"
                               className="w-full h-full object-cover"
                             />
                             <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white gap-2 font-bold text-xs">
@@ -1737,10 +1743,12 @@ export default function AdminPanel({
               exit={{ scale: 0.9, opacity: 0 }}
               className="relative max-w-4xl w-full h-full max-h-[80vh] flex items-center justify-center"
             >
-              <img
+              <SafeImage
                 src={enlargedScreenshot}
                 alt="Enlarged transaction proof slip"
-                className="max-w-full max-h-full object-contain rounded-2xl shadow-2xl border border-white/10"
+                fallbackType="document"
+                wrapperClassName="max-w-full max-h-full"
+                className="w-full h-full object-contain rounded-2xl shadow-2xl border border-white/10"
               />
               <button
                 onClick={() => setEnlargedScreenshot(null)}

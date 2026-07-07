@@ -11,6 +11,7 @@ import { SERVICES } from "../data/services";
 // @ts-ignore
 import { supabase } from "../supabaseClient";
 import { countUploadedPics } from "../lib/limits";
+import { SafeImage } from "./SafeImage";
 
 const PRESET_AVATARS = [
   { url: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=400", gender: "Female", label: "Friendly Sana" },
@@ -377,10 +378,12 @@ export default function CompanionWorkspace({
         {/* Banner with Toggle Status */}
         <div className="bg-white border border-[#E5E1D8] p-6 rounded-3xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-center gap-4">
-            <img
+            <SafeImage
               src={myCompanion.avatar}
               alt={myCompanion.name}
-              className="w-16 h-16 rounded-full object-cover border-2 border-[#D4AF37]"
+              fallbackType={myCompanion.gender as any}
+              wrapperClassName="w-16 h-16 rounded-full border-2 border-[#D4AF37]"
+              className="w-full h-full object-cover"
             />
             <div className="text-left space-y-1.5">
               <div className="flex flex-wrap items-center gap-1.5">
@@ -541,10 +544,12 @@ export default function CompanionWorkspace({
                 <div key={idx} className="relative group aspect-square rounded-2xl bg-[#F9F8F6] border-2 border-dashed border-[#E5E1D8] overflow-hidden flex flex-col items-center justify-center p-4 transition-all hover:border-[#D4AF37]/50">
                   {photo ? (
                     <>
-                      <img
+                      <SafeImage
                         src={photo}
                         alt={`Portfolio Photo ${idx + 1}`}
-                        className="w-full h-full object-cover rounded-xl"
+                        fallbackType="generic"
+                        wrapperClassName="w-full h-full rounded-xl"
+                        className="w-full h-full object-cover"
                         referrerPolicy="no-referrer"
                       />
                       <button
@@ -960,13 +965,12 @@ export default function CompanionWorkspace({
 
           {formAvatar && (
             <div className="flex items-center gap-3 bg-white p-2.5 rounded-xl border border-dashed border-[#E5E1D8] w-fit mt-1 shadow-sm">
-              <img
+              <SafeImage
                 src={avatarPreview || formAvatar}
                 alt="Form Preview"
-                className="w-10 h-10 rounded-full object-cover border border-[#E5E1D8]"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=400";
-                }}
+                fallbackType="Other"
+                wrapperClassName="w-10 h-10 rounded-full border border-[#E5E1D8]"
+                className="w-full h-full object-cover"
               />
               <div>
                 <p className="text-[10px] font-bold text-[#1A1A1A]">Photo Uploaded / Selected</p>
@@ -997,10 +1001,12 @@ export default function CompanionWorkspace({
                 <div key={idx} className="relative aspect-square rounded-xl bg-white border border-dashed border-[#E5E1D8] overflow-hidden flex flex-col items-center justify-center p-3 hover:border-[#D4AF37]/50 transition-all">
                   {photo ? (
                     <>
-                      <img
+                      <SafeImage
                         src={photo}
                         alt={`Portfolio Photo Preview ${idx + 1}`}
-                        className="w-full h-full object-cover rounded-lg"
+                        fallbackType="generic"
+                        wrapperClassName="w-full h-full rounded-lg"
+                        className="w-full h-full object-cover"
                         referrerPolicy="no-referrer"
                       />
                       <button
