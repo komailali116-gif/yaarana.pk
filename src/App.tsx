@@ -27,8 +27,7 @@ import {
   getStoredProfile,
   saveStoredProfile,
   DEFAULT_USER,
-  DEFAULT_ADMIN,
-  resetLocalStorage
+  DEFAULT_ADMIN
 } from "./lib/storage";
 
 // Database Model Mapping Helper Functions
@@ -234,7 +233,7 @@ export default function App() {
   const [appSettings, setAppSettings] = useState({
     announcement: "✨ Welcome to Yarana.pk - Pakistan's #1 Safe and Verified Companionship Platform!",
     bannerEnabled: true,
-    bannerText: "📢 Sandbox Demo Mode: Book companions and audit bookings through the Governance Center.",
+    bannerText: "📢 Official Notice: All host companions undergo manual identity verification for maximum safety and compliance.",
     silverMultiplier: 1.0,
     goldMultiplier: 1.3,
     platinumMultiplier: 2.21,
@@ -467,7 +466,7 @@ export default function App() {
         const defaultSettings = {
           announcement: "✨ Welcome to Yarana.pk - Pakistan's #1 Safe and Verified Companionship Platform!",
           bannerEnabled: true,
-          bannerText: "📢 Sandbox Demo Mode: Book companions and audit bookings through the Governance Center.",
+          bannerText: "📢 Official Notice: All host companions undergo manual identity verification for maximum safety and compliance.",
           silverMultiplier: 1.0,
           goldMultiplier: 1.3,
           platinumMultiplier: 2.21,
@@ -779,32 +778,6 @@ export default function App() {
     localStorage.removeItem("yarana_profile");
     supabase.auth.signOut();
     setCurrentTab("browse");
-  };
-
-  // Reset application to default seeds
-  const handleResetApp = async () => {
-    if (window.confirm("Are you sure you want to restore default demo data? All custom bookings, reviews, and host profiles will be reset.")) {
-      resetLocalStorage();
-      
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          // Clear custom rows on Supabase to reset seeds
-          await supabase.from("bookings").delete().eq("user_id", session.user.id);
-          await supabase.from("reviews").delete().eq("user_id", session.user.id);
-          await supabase.from("companions").delete().eq("user_id", session.user.id);
-        }
-      } catch (err) {
-        console.error("Failed to delete database records during app reset:", err);
-      }
-
-      setCompanions(getStoredCompanions());
-      setBookings(getStoredBookings());
-      setReviews(getStoredReviews());
-      if (user) {
-        handleUpdateProfile(user.isAdmin ? DEFAULT_ADMIN : DEFAULT_USER);
-      }
-    }
   };
 
   const loadBookings = async (currentProfile: UserProfile | null) => {
@@ -1253,7 +1226,6 @@ export default function App() {
             profile={user}
             onLogout={handleLogout}
             onToggleAdmin={handleToggleAdminRole}
-            onResetApp={handleResetApp}
             onSwitchRole={handleSwitchRole}
           />
 
@@ -1406,13 +1378,6 @@ export default function App() {
 
               <div className="flex flex-wrap items-center gap-3">
                 <span className="italic font-serif text-gray-400 mr-2">"Curing loneliness with respect & safety"</span>
-                <button
-                  onClick={handleResetApp}
-                  className="text-[10px] text-[#D4AF37] hover:bg-[#D4AF37]/10 cursor-pointer border border-[#D4AF37]/30 px-2 py-1 rounded-full transition-all"
-                  title="Wipe data from localStorage and seed defaults"
-                >
-                  Reset App Data
-                </button>
                 <span className="bg-red-50 text-red-500 px-3 py-1 rounded-full font-bold border border-red-100 text-[10px] uppercase">
                   Emergency Support 24/7
                 </span>

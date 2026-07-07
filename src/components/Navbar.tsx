@@ -10,7 +10,6 @@ interface NavbarProps {
   profile: UserProfile;
   onLogout: () => void;
   onToggleAdmin: () => void;
-  onResetApp: () => void;
   onSwitchRole?: (role: "client" | "companion") => void;
 }
 
@@ -20,7 +19,6 @@ export default function Navbar({
   profile,
   onLogout,
   onToggleAdmin,
-  onResetApp,
   onSwitchRole
 }: NavbarProps) {
   const isCompanionMode = profile.selectedRole === "companion";
@@ -163,7 +161,7 @@ export default function Navbar({
             {profile.email?.toLowerCase() === "komailali116@gmail.com" && (
               <button
                 onClick={onToggleAdmin}
-                className="hidden sm:flex items-center gap-1 px-3 py-1.5 rounded-full bg-[#F3F0E9] text-[11px] font-semibold text-gray-600 hover:text-[#D4AF37] cursor-pointer transition-all border border-[#E5E1D8]"
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-[#F3F0E9] text-[10px] sm:text-[11px] font-semibold text-gray-600 hover:text-[#D4AF37] cursor-pointer transition-all border border-[#E5E1D8]"
                 title="Quickly toggle between regular User and Admin roles for testing!"
                 id="nav-toggle-admin-role"
               >

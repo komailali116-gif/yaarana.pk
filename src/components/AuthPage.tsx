@@ -133,12 +133,6 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
     }
   };
 
-  const fillTestCredentials = () => {
-    setEmail("user@yarana.pk");
-    setPassword("user123");
-    setIsLogin(true);
-  };
-
   return (
     <div className="min-h-screen bg-[#F9F8F6] text-[#2D2D2D] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
       {/* Background decoration */}
@@ -334,21 +328,6 @@ export default function AuthPage({ onLoginSuccess }: AuthPageProps) {
           </button>
         </p>
 
-        {/* Quick Credentials Sandbox Assist */}
-        <div className="mt-6 pt-5 border-t border-[#E5E1D8]/60 text-xs text-gray-400">
-          <div className="flex items-center gap-1.5 mb-2 font-bold text-gray-500 uppercase tracking-wider text-[10px]">
-            <Info className="w-3.5 h-3.5 text-[#D4AF37]" />
-            <span>Sandbox Test Accounts:</span>
-          </div>
-          <div className="mt-1">
-            <button
-              onClick={() => fillTestCredentials()}
-              className="w-full px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-mono text-[9px] text-center truncate cursor-pointer transition-all border border-[#E5E1D8]/40"
-            >
-              Demo Client Account
-            </button>
-          </div>
-        </div>
       </motion.div>
     </div>
   );

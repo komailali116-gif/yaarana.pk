@@ -120,6 +120,10 @@ export default function AdminPanel({
   const [bannerTextState, setBannerTextState] = useState(appSettings.bannerText);
   const [bannerEnabledState, setBannerEnabledState] = useState(appSettings.bannerEnabled);
 
+  // Activity Logs filtering & searching states
+  const [logSearch, setLogSearch] = useState("");
+  const [logTypeFilter, setLogTypeFilter] = useState("all");
+
   // Companion creation uploader states (inherited for admin onboarding)
   const [newCompName, setNewCompName] = useState("");
   const [newCompAge, setNewCompAge] = useState(24);
@@ -288,6 +292,59 @@ export default function AdminPanel({
     }
   };
 
+  // Export & Filter Logs helper functions
+  const filteredLogs = (appSettings.adminLogs || []).filter((log: any) => {
+    const searchLower = logSearch.toLowerCase();
+    const titleLower = (log.title || "").toLowerCase();
+    const detailsLower = (log.details || "").toLowerCase();
+    const ipLower = (log.ip || "").toLowerCase();
+
+    const matchesSearch =
+      titleLower.includes(searchLower) ||
+      detailsLower.includes(searchLower) ||
+      ipLower.includes(searchLower);
+
+    if (!matchesSearch) return false;
+
+    if (logTypeFilter === "all") return true;
+    if (logTypeFilter === "settings") {
+      return titleLower.includes("settings") || titleLower.includes("multiplier") || titleLower.includes("banner") || titleLower.includes("ticker");
+    }
+    if (logTypeFilter === "user") {
+      return titleLower.includes("user") || titleLower.includes("account") || titleLower.includes("suspend") || titleLower.includes("reactivat") || titleLower.includes("delete");
+    }
+    if (logTypeFilter === "companion") {
+      return titleLower.includes("companion") || titleLower.includes("host") || titleLower.includes("onboard") || titleLower.includes("vetting");
+    }
+    if (logTypeFilter === "payment") {
+      return titleLower.includes("payment") || titleLower.includes("audit") || titleLower.includes("revenue") || titleLower.includes("receipt");
+    }
+    if (logTypeFilter === "other") {
+      const isKnown =
+        titleLower.includes("settings") || titleLower.includes("multiplier") || titleLower.includes("banner") || titleLower.includes("ticker") ||
+        titleLower.includes("user") || titleLower.includes("account") || titleLower.includes("suspend") || titleLower.includes("reactivat") || titleLower.includes("delete") ||
+        titleLower.includes("companion") || titleLower.includes("host") || titleLower.includes("onboard") || titleLower.includes("vetting") ||
+        titleLower.includes("payment") || titleLower.includes("audit") || titleLower.includes("revenue") || titleLower.includes("receipt");
+      return !isKnown;
+    }
+    return true;
+  });
+
+  const handleExportLogs = () => {
+    try {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(appSettings.adminLogs, null, 2));
+      const downloadAnchor = document.createElement("a");
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `yarana_admin_logs_${Date.now()}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      displaySuccess("Activity logs exported to JSON file successfully!");
+    } catch (err: any) {
+      displayError("Export failed: " + err.message);
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 text-left" id="admin-governance-panel">
       
@@ -310,7 +367,7 @@ export default function AdminPanel({
               { id: "payments", label: "Payment Audits", icon: CreditCard },
               { id: "pricing", label: "Pricing Matrices", icon: Coins },
               { id: "content", label: "Content Hub", icon: Settings },
-              { id: "logs", label: "Governance Logs", icon: FileText }
+              { id: "logs", label: "Activity Logs", icon: FileText }
             ].map(tab => {
               const Icon = tab.icon;
               const isSelected = activeTab === tab.id;
@@ -1213,7 +1270,7 @@ export default function AdminPanel({
                   rows={3}
                   value={bannerTextState}
                   onChange={(e) => setBannerTextState(e.target.value)}
-                  placeholder="e.g. 📢 Sandbox Governance Mode: Verify receipts and upgrade membership tiers via owner controls."
+                  placeholder="e.g. 📢 Official Alert: Host companion applications are currently experiencing high volume. Vetting may take up to 24 hours."
                   className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-2.5 px-3.5 text-xs focus:outline-none focus:border-[#D4AF37] resize-none"
                 />
               </div>
@@ -1228,39 +1285,101 @@ export default function AdminPanel({
           </div>
         )}
 
-        {/* TAB 7: IMMUTABLE AUDIT LOGS */}
+        {/* TAB 7: SYSTEM ACTIVITY LOGS */}
         {activeTab === "logs" && (
           <div className="bg-white border border-[#E5E1D8] rounded-3xl p-6 shadow-sm space-y-6 animate-fade-in">
-            <div className="border-b border-[#E5E1D8]/60 pb-4">
-              <h3 className="text-base font-serif font-black text-[#1A1A1A] tracking-tight">System Security Audits</h3>
-              <p className="text-xs text-gray-500 mt-1">Immutable log timeline of all administrative operations performed on the Yarana registry engine.</p>
+            <div className="border-b border-[#E5E1D8]/60 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-base font-serif font-black text-[#1A1A1A] tracking-tight">System Activity Logs</h3>
+                <p className="text-xs text-gray-500 mt-1">Immutable registry of administrative actions, safety controls, settings adjustments, and payment audit operations.</p>
+              </div>
+              <button
+                onClick={handleExportLogs}
+                className="self-start md:self-auto px-4 py-2 bg-[#1A1C20] hover:bg-[#D4AF37] hover:text-black text-white font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer text-xs"
+              >
+                <Upload className="w-3.5 h-3.5 rotate-180" />
+                <span>Export logs as JSON</span>
+              </button>
+            </div>
+
+            {/* Searching & Category Filtering Controls */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-grow">
+                <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Filter logs by operation title, description, or email..."
+                  value={logSearch}
+                  onChange={(e) => setLogSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 text-xs bg-[#F3F0E9]/30 border border-[#E5E1D8] rounded-xl focus:outline-none focus:border-[#D4AF37]"
+                />
+              </div>
+
+              <select
+                value={logTypeFilter}
+                onChange={(e) => setLogTypeFilter(e.target.value)}
+                className="px-3.5 py-2 text-xs bg-[#F3F0E9]/30 border border-[#E5E1D8] rounded-xl focus:outline-none focus:border-[#D4AF37] font-bold text-gray-700 cursor-pointer"
+              >
+                <option value="all">⚡ All Operations</option>
+                <option value="settings">⚙️ Settings &amp; Tariffs</option>
+                <option value="user">👤 User Suspensions</option>
+                <option value="companion">🏆 Companion Registry</option>
+                <option value="payment">💳 Payment Audits</option>
+                <option value="other">🧬 Miscellaneous</option>
+              </select>
             </div>
 
             {/* Audit Logs Table */}
-            <div className="overflow-x-auto border border-[#E5E1D8]/60 rounded-2xl max-h-[500px]">
+            <div className="overflow-x-auto border border-[#E5E1D8]/60 rounded-2xl max-h-[550px]">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-[#F9F8F6] border-b border-[#E5E1D8] font-mono text-gray-400 uppercase text-[9px] font-bold">
                     <th className="py-3 px-4">Timestamp</th>
                     <th className="py-3 px-4">Event Operation</th>
                     <th className="py-3 px-4">Audit Description</th>
-                    <th className="py-3 px-4">Administrator Key</th>
+                    <th className="py-3 px-4">Originator (IP/Email)</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#E5E1D8]/40 font-mono text-[11px]">
-                  {(appSettings.adminLogs || []).map((log: any) => (
-                    <tr key={log.id} className="hover:bg-gray-50/30">
-                      <td className="py-3 px-4 text-gray-400 font-bold">
-                        {new Date(log.timestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'medium' })}
-                      </td>
-                      <td className="py-3 px-4 text-indigo-700 font-bold">{log.title}</td>
-                      <td className="py-3 px-4 text-gray-600 font-sans leading-normal">{log.details}</td>
-                      <td className="py-3 px-4 text-gray-400 italic">{log.ip}</td>
-                    </tr>
-                  ))}
-                  {(!appSettings.adminLogs || appSettings.adminLogs.length === 0) && (
+                <tbody className="divide-y divide-[#E5E1D8]/40 text-[11px]">
+                  {filteredLogs.map((log: any) => {
+                    const getBadgeStyle = (title: string) => {
+                      const t = title.toLowerCase();
+                      if (t.includes("suspend") || t.includes("delete") || t.includes("drop") || t.includes("reject")) {
+                        return "bg-red-50 text-red-700 border border-red-200/50";
+                      }
+                      if (t.includes("approve") || t.includes("reactivat") || t.includes("register") || t.includes("onboard")) {
+                        return "bg-green-50 text-green-700 border border-green-200/50";
+                      }
+                      if (t.includes("settings") || t.includes("multiplier") || t.includes("tariff") || t.includes("alignment")) {
+                        return "bg-blue-50 text-blue-700 border border-blue-200/50";
+                      }
+                      return "bg-gray-50 text-gray-700 border border-gray-200/50";
+                    };
+
+                    return (
+                      <tr key={log.id} className="hover:bg-[#F3F0E9]/10 transition-colors">
+                        <td className="py-3 px-4 text-gray-400 font-mono font-semibold whitespace-nowrap">
+                          {new Date(log.timestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'medium' })}
+                        </td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${getBadgeStyle(log.title || "")}`}>
+                            {log.title}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-gray-600 leading-relaxed font-sans max-w-sm">
+                          {log.details}
+                        </td>
+                        <td className="py-3 px-4 font-mono text-gray-500 font-bold max-w-xs truncate" title={log.ip}>
+                          {log.ip}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {filteredLogs.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="py-6 text-center text-gray-400">No security audit logs recorded.</td>
+                      <td colSpan={4} className="py-12 text-center text-gray-400 font-medium">
+                        No activity records found matching the filter criteria.
+                      </td>
                     </tr>
                   )}
                 </tbody>
