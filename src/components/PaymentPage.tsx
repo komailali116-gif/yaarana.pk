@@ -31,7 +31,7 @@ export default function PaymentPage({
   onCancel
 }: PaymentPageProps) {
   const [method, setMethod] = useState<PaymentMethod>("EasyPaisa");
-  const [senderName, setSenderName] = useState(profile.name || "");
+  const [senderName, setSenderName] = useState("");
   const [senderAccountNumber, setSenderAccountNumber] = useState("");
   const [transactionId, setTransactionId] = useState("");
   const [amountPaid, setAmountPaid] = useState<number>(bookingDetail.totalPrice);
@@ -346,7 +346,7 @@ export default function PaymentPage({
                 required
                 value={senderName}
                 onChange={(e) => setSenderName(e.target.value)}
-                placeholder="e.g. Komail Ali"
+                placeholder="e.g. Muhammad Khan"
                 className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-3 pl-10 pr-3.5 text-gray-800 text-xs focus:outline-none focus:border-[#D4AF37]"
               />
             </div>
