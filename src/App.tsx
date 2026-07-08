@@ -131,24 +131,25 @@ function mapCompanionToDB(c: Companion, userId?: string | null): any {
 
   return {
     id: c.id,
-    name: c.name,
-    age: c.age,
-    gender: c.gender,
-    city: c.city,
+    name: c.name || "Yarana Companion",
+    age: c.age ? Number(c.age) : 21,
+    gender: c.gender || "Female",
+    city: c.city || "Lahore",
     avatar: c.avatar,
-    bio: c.bio,
-    rating: c.rating,
-    reviews_count: c.reviewsCount,
-    languages: c.languages,
-    interests: c.interests,
-    services: c.services,
-    status: c.status,
-    is_online: c.isOnline,
-    featured: c.featured,
+    bio: c.bio || "",
+    rating: c.rating !== undefined ? Number(c.rating) : 5.0,
+    reviews_count: c.reviewsCount !== undefined ? Number(c.reviewsCount) : 0,
+    languages: c.languages || [],
+    interests: c.interests || [],
+    services: c.services || [],
+    status: c.status || CompanionStatus.APPROVED,
+    is_online: c.isOnline !== undefined ? Boolean(c.isOnline) : true,
+    featured: c.featured !== undefined ? Boolean(c.featured) : false,
     tagline: packedTagline,
     cnic: c.cnic || null,
     mobile: c.mobile || null,
-    user_id: userId !== undefined ? userId : (c.userId || null)
+    user_id: userId !== undefined ? userId : (c.userId || null),
+    created_at: new Date().toISOString()
   };
 }
 
@@ -1214,6 +1215,19 @@ export default function App() {
 
   // ADMIN ACTION: Register new companion
   const handleAddNewCompanion = async (newComp: Companion) => {
+    // Explicitly apply defaults to ensure all required fields are present and correctly typed
+    const finalizedComp: Companion = {
+      ...newComp,
+      status: newComp.status || CompanionStatus.APPROVED,
+      isOnline: newComp.isOnline !== undefined ? newComp.isOnline : true,
+      rating: newComp.rating !== undefined ? Number(newComp.rating) : 5.0,
+      reviewsCount: newComp.reviewsCount !== undefined ? Number(newComp.reviewsCount) : 0,
+      featured: newComp.featured !== undefined ? Boolean(newComp.featured) : false,
+      languages: newComp.languages || [],
+      interests: newComp.interests || [],
+      services: newComp.services || []
+    };
+
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const uid = session?.user?.id;
@@ -1223,7 +1237,7 @@ export default function App() {
         const hasNoLimits = isAppAdmin || isHost;
 
         if (!hasNoLimits) {
-          const isCustomAvatar = newComp.avatar && !newComp.avatar.startsWith("http") && !newComp.avatar.startsWith("data:");
+          const isCustomAvatar = finalizedComp.avatar && !finalizedComp.avatar.startsWith("http") && !finalizedComp.avatar.startsWith("data:");
           if (isCustomAvatar) {
             const picCount = await countUploadedPics(uid);
             if (picCount >= 3) {
@@ -1237,7 +1251,7 @@ export default function App() {
       console.error("Failed limit check in handleAddNewCompanion:", err);
     }
 
-    const updatedCompanions = [...companions, newComp];
+    const updatedCompanions = [...companions, finalizedComp];
     setCompanions(updatedCompanions);
     saveStoredCompanions(updatedCompanions);
 
@@ -1250,7 +1264,7 @@ export default function App() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const targetUserId = (user && user.isAdmin) ? null : (session ? session.user.id : null);
-      const dbRecord = mapCompanionToDB(newComp, targetUserId);
+      const dbRecord = mapCompanionToDB(finalizedComp, targetUserId);
       console.log("Saving companion to Supabase database...", dbRecord);
       
       const { data, error } = await supabase
