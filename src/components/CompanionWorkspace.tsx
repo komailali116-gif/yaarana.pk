@@ -1104,98 +1104,80 @@ export default function CompanionWorkspace({
             <p className="text-[11px] text-gray-500 font-light mt-0.5">Please upload your actual real photo. Stock photos or generic avatars are strictly prohibited. Customers will see this when selecting a companion to hire.</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-            <div>
-              <span className="block text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Option 1: Direct File Upload (Recommended)</span>
-              <label className="flex items-center justify-center gap-2 p-2.5 border border-dashed border-[#E5E1D8] hover:border-[#D4AF37] rounded-xl bg-white cursor-pointer transition-all hover:bg-gray-50 text-xs text-gray-600 font-semibold">
-                <Upload className={`w-4 h-4 text-[#D4AF37] ${isUploading ? "animate-bounce" : ""}`} />
-                <span>{isUploading ? "Uploading..." : "Upload Real Profile Photo"}</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  disabled={isUploading}
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      setIsUploading(true);
-                      setFormError("");
+          <div className="pt-1">
+            <label className="flex items-center justify-center gap-2 p-2.5 border border-dashed border-[#E5E1D8] hover:border-[#D4AF37] rounded-xl bg-white cursor-pointer transition-all hover:bg-gray-50 text-xs text-gray-600 font-semibold">
+              <Upload className={`w-4 h-4 text-[#D4AF37] ${isUploading ? "animate-bounce" : ""}`} />
+              <span>{isUploading ? "Uploading..." : "Upload Real Profile Photo"}</span>
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                disabled={isUploading}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    setIsUploading(true);
+                    setFormError("");
+                    
+                    try {
+                      const { data: sessionData } = await supabase.auth.getSession();
+                      const uid = sessionData?.session?.user?.id || "anonymous";
                       
-                      try {
-                        const { data: sessionData } = await supabase.auth.getSession();
-                        const uid = sessionData?.session?.user?.id || "anonymous";
-                        
-                        // Limit Check: Count uploaded pics first
-                        const isHost = user.selectedRole === "companion" || !!myCompanion;
-                        const isAppAdmin = user.isAdmin;
-                        const hasNoLimits = isAppAdmin || isHost;
-                        
-                        if (!hasNoLimits) {
-                          const picCount = await countUploadedPics(uid);
-                          if (picCount >= 3) {
-                            setShowLimitModal(true);
-                            setIsUploading(false);
-                            return;
-                          }
-                        }
-                        
-                        const uuid = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
-                        const extension = file.name.split('.').pop() || 'png';
-                        const filePath = `${uid}/companions/${myCompanionId}/${uuid}.${extension}`;
-                        
-                        const { error } = await supabase.storage
-                          .from("app-files")
-                          .upload(filePath, file, { cacheControl: "3600", upsert: true });
-                          
-                        if (error) {
-                          console.warn("Avatar upload failed. Falling back to local Base64 storage:", error.message);
-                          const reader = new FileReader();
-                          reader.onloadend = () => {
-                            if (typeof reader.result === "string") {
-                              setAvatarPreview(reader.result);
-                              setFormAvatar(reader.result); // Save Base64 directly
-                              setPresetIdx(-2);
-                              setIsUploading(false);
-                            }
-                          };
-                          reader.readAsDataURL(file);
+                      // Limit Check: Count uploaded pics first
+                      const isHost = user.selectedRole === "companion" || !!myCompanion;
+                      const isAppAdmin = user.isAdmin;
+                      const hasNoLimits = isAppAdmin || isHost;
+                      
+                      if (!hasNoLimits) {
+                        const picCount = await countUploadedPics(uid);
+                        if (picCount >= 3) {
+                          setShowLimitModal(true);
+                          setIsUploading(false);
                           return;
                         }
+                      }
+                      
+                      const uuid = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
+                      const extension = file.name.split('.').pop() || 'png';
+                      const filePath = `${uid}/companions/${myCompanionId}/${uuid}.${extension}`;
+                      
+                      const { error } = await supabase.storage
+                        .from("app-files")
+                        .upload(filePath, file, { cacheControl: "3600", upsert: true });
                         
+                      if (error) {
+                        console.warn("Avatar upload failed. Falling back to local Base64 storage:", error.message);
                         const reader = new FileReader();
                         reader.onloadend = () => {
                           if (typeof reader.result === "string") {
                             setAvatarPreview(reader.result);
-                            setFormAvatar(filePath);
+                            setFormAvatar(reader.result); // Save Base64 directly
                             setPresetIdx(-2);
                             setIsUploading(false);
                           }
                         };
                         reader.readAsDataURL(file);
-                      } catch (err: any) {
-                        setFormError("Upload error: " + (err.message || err));
-                        setIsUploading(false);
+                        return;
                       }
+                      
+                      const reader = new FileReader();
+                      reader.onloadend = () => {
+                        if (typeof reader.result === "string") {
+                          setAvatarPreview(reader.result);
+                          setFormAvatar(filePath);
+                          setPresetIdx(-2);
+                          setIsUploading(false);
+                        }
+                      };
+                      reader.readAsDataURL(file);
+                    } catch (err: any) {
+                      setFormError("Upload error: " + (err.message || err));
+                      setIsUploading(false);
                     }
-                  }}
-                />
-              </label>
-            </div>
-
-            <div>
-              <span className="block text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Option 2: Paste Photo URL</span>
-              <input
-                type="url"
-                placeholder="e.g. https://images.unsplash.com/photo-..."
-                value={formAvatar.includes("/") && !formAvatar.startsWith("http") && !formAvatar.startsWith("data:") ? "" : formAvatar}
-                onChange={(e) => {
-                  setFormAvatar(e.target.value);
-                  setAvatarPreview("");
-                  setPresetIdx(-1);
+                  }
                 }}
-                className="w-full bg-white border border-[#E5E1D8] text-gray-800 rounded-xl p-2.5 text-xs focus:outline-none focus:border-[#D4AF37]"
               />
-            </div>
+            </label>
           </div>
 
           {formAvatar && (
