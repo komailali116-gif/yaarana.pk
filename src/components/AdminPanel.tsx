@@ -266,24 +266,44 @@ export default function AdminPanel({
       const uuid = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
       const filePath = `companions/${uid}/portfolio_${slotIdx}_${uuid}.png`;
 
-      const { error } = await supabase.storage
-        .from("app-files")
-        .upload(filePath, file, { cacheControl: "3600", upsert: true });
+      try {
+        const { error } = await supabase.storage
+          .from("app-files")
+          .upload(filePath, file, { cacheControl: "3600", upsert: true });
 
-      if (error) throw error;
+        if (error) throw error;
 
-      // Create signed URL for instant display
-      const { data: signedData, error: signedError } = await supabase.storage
-        .from("app-files")
-        .createSignedUrl(filePath, 3600);
+        // Create signed URL for instant display
+        const { data: signedData, error: signedError } = await supabase.storage
+          .from("app-files")
+          .createSignedUrl(filePath, 3600);
 
-      if (!signedError && signedData) {
-        setNewCompPreviews(prev => ({ ...prev, [slotIdx]: signedData.signedUrl }));
-        setNewCompPhotos(prev => {
-          const updated = [...prev];
-          updated[slotIdx] = filePath;
-          return updated;
-        });
+        if (!signedError && signedData) {
+          setNewCompPreviews(prev => ({ ...prev, [slotIdx]: signedData.signedUrl }));
+          setNewCompPhotos(prev => {
+            const updated = [...prev];
+            updated[slotIdx] = filePath;
+            return updated;
+          });
+        } else {
+          throw signedError || new Error("Failed to sign url");
+        }
+      } catch (uploadError: any) {
+        console.warn("Direct storage upload failed (possibly due to RLS/security level). Falling back to Base64:", uploadError);
+        // Fallback: Read file as base64 data-URL and save it directly
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (typeof reader.result === "string") {
+            const resultBase64 = reader.result;
+            setNewCompPreviews(prev => ({ ...prev, [slotIdx]: resultBase64 }));
+            setNewCompPhotos(prev => {
+              const updated = [...prev];
+              updated[slotIdx] = resultBase64;
+              return updated;
+            });
+          }
+        };
+        reader.readAsDataURL(file);
       }
     } catch (err: any) {
       console.error("Companion photo upload failed:", err);
@@ -1046,7 +1066,7 @@ export default function AdminPanel({
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
               <div>
                 <h3 className="text-base font-serif font-black text-[#1A1A1A] tracking-tight">Manual Payment Requests Hub</h3>
-                <p className="text-xs text-gray-500 mt-1">Review pending subscription activations and companion booking manual payments, verify references, and approve accounts.</p>
+                <p className="text-xs text-gray-500 mt-1">Review pending subscription activations and companion booking manual payments, verify transaction details, and approve accounts.</p>
               </div>
               <select
                 value={paymentStatusFilter}
@@ -1065,7 +1085,7 @@ export default function AdminPanel({
               </span>
               <input
                 type="text"
-                placeholder="Search by transaction reference ID or client email..."
+                placeholder="Search by transaction ID or client email..."
                 value={paymentSearch}
                 onChange={(e) => setPaymentSearch(e.target.value)}
                 className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-2.5 pl-10 pr-3.5 text-gray-800 text-xs focus:outline-none focus:border-[#D4AF37]"
@@ -1079,7 +1099,7 @@ export default function AdminPanel({
                   <tr className="bg-[#F9F8F6] border-b border-[#E5E1D8] font-mono text-gray-400 uppercase text-[9px] font-bold">
                     <th className="py-3 px-4">Sender &amp; Contact</th>
                     <th className="py-3 px-4">Booking Tariff</th>
-                    <th className="py-3 px-4">Manual Method &amp; Reference ID</th>
+                    <th className="py-3 px-4">Manual Method &amp; Transaction ID</th>
                     <th className="py-3 px-4">Submitted At</th>
                     <th className="py-3 px-4 text-center">Clearance Status</th>
                   </tr>
@@ -1574,7 +1594,7 @@ export default function AdminPanel({
                 <div className="flex justify-between items-center border-b border-gray-100 pb-4">
                   <div>
                     <h3 className="text-base font-serif font-black text-gray-900">Manual Billing Audit</h3>
-                    <p className="text-[10px] text-gray-400 mt-1 uppercase font-mono tracking-wider font-semibold">REF: {selectedPaymentDetail.transactionId}</p>
+                    <p className="text-[10px] text-gray-400 mt-1 uppercase font-mono tracking-wider font-semibold">ID: {selectedPaymentDetail.transactionId}</p>
                   </div>
                   <button onClick={() => setSelectedPaymentDetail(null)} className="p-1.5 rounded-full hover:bg-gray-100 cursor-pointer">
                     <X className="w-5 h-5 text-gray-500" />

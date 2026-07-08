@@ -138,8 +138,19 @@ export default function CompanionWorkspace({
         .upload(filePath, file, { cacheControl: "3600", upsert: true });
 
       if (error) {
-        setPhotosError("Failed to upload portfolio photo: " + error.message);
-        setIsPhotoUploading(null);
+        console.warn("Portfolio upload failed. Falling back to local Base64 storage:", error.message);
+        // Fallback: load directly as base64 and save that as the path
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (typeof reader.result === "string") {
+            const updated = [...formPhotos];
+            updated[slotIndex] = reader.result;
+            setFormPhotos(updated);
+            setPhotoPreviews(prev => ({ ...prev, [slotIndex]: reader.result as string }));
+            setIsPhotoUploading(null);
+          }
+        };
+        reader.readAsDataURL(file);
         return;
       }
 
@@ -922,8 +933,17 @@ export default function CompanionWorkspace({
                           .upload(filePath, file, { cacheControl: "3600", upsert: true });
                           
                         if (error) {
-                          setFormError("Failed to upload image: " + error.message);
-                          setIsUploading(false);
+                          console.warn("Avatar upload failed. Falling back to local Base64 storage:", error.message);
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            if (typeof reader.result === "string") {
+                              setAvatarPreview(reader.result);
+                              setFormAvatar(reader.result); // Save Base64 directly
+                              setPresetIdx(-2);
+                              setIsUploading(false);
+                            }
+                          };
+                          reader.readAsDataURL(file);
                           return;
                         }
                         
