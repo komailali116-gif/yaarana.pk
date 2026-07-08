@@ -301,7 +301,7 @@ export default function CompanionDetailModal({
           {/* Cover & Avatar Header */}
           <div className="flex flex-col sm:flex-row gap-5 items-start sm:items-center">
             <SafeImage
-              src={companion.avatar}
+              src={(companion.photos && companion.photos.filter(Boolean).length > 0) ? companion.photos.filter(Boolean)[0] : companion.avatar}
               alt={companion.name}
               referrerPolicy="no-referrer"
               fallbackType={companion.gender as any}

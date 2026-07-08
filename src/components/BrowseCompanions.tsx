@@ -453,7 +453,7 @@ export default function BrowseCompanions({
               {/* Card Head / Avatar Section */}
               <div className="relative h-64 w-full bg-gray-100 overflow-hidden">
                 <SafeImage
-                  src={comp.avatar}
+                  src={(comp.photos && comp.photos.filter(Boolean).length > 0) ? comp.photos.filter(Boolean)[0] : comp.avatar}
                   alt={comp.name}
                   referrerPolicy="no-referrer"
                   fallbackType={comp.gender as any}

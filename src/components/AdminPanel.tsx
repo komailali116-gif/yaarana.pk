@@ -1038,7 +1038,7 @@ export default function AdminPanel({
                           <tr key={companion.id} className="hover:bg-gray-50/50 transition-colors">
                             <td className="py-3 px-4 flex items-center gap-3">
                               <SafeImage
-                                src={companion.avatar}
+                                src={(companion.photos && companion.photos.filter(Boolean).length > 0) ? companion.photos.filter(Boolean)[0] : companion.avatar}
                                 alt={companion.name}
                                 fallbackType={companion.gender as any}
                                 wrapperClassName="w-10 h-10 rounded-full border border-gray-100"

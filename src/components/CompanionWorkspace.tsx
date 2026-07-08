@@ -484,7 +484,7 @@ export default function CompanionWorkspace({
         <div className="bg-white border border-[#E5E1D8] p-6 rounded-3xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-center gap-4">
             <SafeImage
-              src={myCompanion.avatar}
+              src={(myCompanion.photos && myCompanion.photos.filter(Boolean).length > 0) ? myCompanion.photos.filter(Boolean)[0] : myCompanion.avatar}
               alt={myCompanion.name}
               fallbackType={myCompanion.gender as any}
               wrapperClassName="w-16 h-16 rounded-full border-2 border-[#D4AF37]"

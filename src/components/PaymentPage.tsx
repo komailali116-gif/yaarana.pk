@@ -162,7 +162,7 @@ export default function PaymentPage({
       <div className="bg-[#F3F0E9]/30 border border-[#E5E1D8]/60 p-4 rounded-2xl flex items-center justify-between gap-4 shadow-sm">
         <div className="flex items-center gap-3">
           <SafeImage
-            src={companion.avatar}
+            src={(companion.photos && companion.photos.filter(Boolean).length > 0) ? companion.photos.filter(Boolean)[0] : companion.avatar}
             alt={companion.name}
             referrerPolicy="no-referrer"
             fallbackType={companion.gender as any}
