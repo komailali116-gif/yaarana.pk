@@ -10,6 +10,7 @@ import PaymentPage from "./components/PaymentPage";
 import AccountInfo from "./components/AccountInfo";
 import SafetyPage from "./components/SafetyPage";
 import AdminPanel from "./components/AdminPanel";
+import AdminChatWidget from "./components/AdminChatWidget";
 import RoleSelectionPage from "./components/RoleSelectionPage";
 import CompanionWorkspace from "./components/CompanionWorkspace";
 import { Companion, Booking, Review, UserProfile, CompanionStatus, PaymentRequest, PricingTier, parsePaymentNote, stringifyPaymentNote } from "./types";
@@ -1106,6 +1107,26 @@ export default function App() {
     }
   };
 
+  const handleUpdateCompanionAvatar = async (id: string, avatar: string) => {
+    const updatedCompanions = companions.map(c => {
+      if (c.id === id) {
+        return { ...c, avatar };
+      }
+      return c;
+    });
+    setCompanions(updatedCompanions);
+    saveStoredCompanions(updatedCompanions);
+
+    try {
+      const compObj = updatedCompanions.find(c => c.id === id);
+      if (compObj) {
+        await supabase.from("companions").update(mapCompanionToDB(compObj)).eq("id", id);
+      }
+    } catch (err) {
+      console.error("Failed to update companion avatar in Supabase database:", err);
+    }
+  };
+
   // ADMIN ACTION: Reject pending host application
   const handleRejectCompanion = async (id: string) => {
     const updatedCompanions = companions.map(c => {
@@ -1332,6 +1353,7 @@ export default function App() {
                   onSubmitApplication={handleAddNewCompanion}
                   onToggleOnline={handleToggleOnline}
                   onUpdateCompanionPhotos={handleUpdateCompanionPhotos}
+                  onUpdateCompanionAvatar={handleUpdateCompanionAvatar}
                   onResubmitApplication={async (companionId) => {
                     const updated = companions.filter(c => c.id !== companionId);
                     setCompanions(updated);
@@ -1432,7 +1454,7 @@ export default function App() {
                 <span className="hidden md:inline text-gray-200">|</span>
                 <div className="flex items-center gap-1.5">
                   <span>Payments:</span>
-                  <span className="text-[#1A1A1A] font-bold">JazzCash, EasyPaisa</span>
+                  <span className="text-[#1A1A1A] font-bold">EasyPaisa</span>
                 </div>
               </div>
 
@@ -1472,6 +1494,9 @@ export default function App() {
           </motion.div>
         </div>
       )}
+
+      {/* Floating Chat with Admin Direct Widget */}
+      <AdminChatWidget user={user} />
 
     </div>
   );

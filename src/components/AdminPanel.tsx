@@ -2,9 +2,10 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Companion, CompanionStatus, CompanionGender, Booking, PAKISTAN_CITIES, PakistanCity, PricingTier, PaymentRequest, UserProfile, parsePaymentNote } from "../types";
 import { SERVICES, INITIAL_SERVICES } from "../data/services";
-import { Shield, Users, Check, X, Sparkles, Plus, Trash2, ShieldAlert, Star, ListFilter, Upload, Award, Camera, Coins, Settings, Save, RefreshCw, Edit2, CreditCard, Search, Ban, Eye, FileText, CheckCircle2, TrendingUp, DollarSign, ArrowUpRight, Activity } from "lucide-react";
+import { Shield, Users, Check, X, Sparkles, Plus, Trash2, ShieldAlert, Star, ListFilter, Upload, Award, Camera, Coins, Settings, Save, RefreshCw, Edit2, CreditCard, Search, Ban, Eye, FileText, CheckCircle2, TrendingUp, DollarSign, ArrowUpRight, Activity, MessageSquare, Send, MessageCircle } from "lucide-react";
 import { supabase } from "../supabaseClient";
 import { SafeImage } from "./SafeImage";
+import { fetchChatMessages, sendChatMessage, ChatMessage } from "../lib/chatService";
 
 interface AdminPanelProps {
   companions: Companion[];
@@ -83,9 +84,16 @@ export default function AdminPanel({
   }
 
   // --- COMPONENT STATE ---
-  const [activeTab, setActiveTab] = useState<"dashboard" | "users" | "companions" | "payments" | "pricing" | "content" | "logs">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "users" | "companions" | "payments" | "pricing" | "content" | "logs" | "support_chats">("dashboard");
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+
+  // Support Chats panel states
+  const [adminChats, setAdminChats] = useState<ChatMessage[]>([]);
+  const [selectedChatUserEmail, setSelectedChatUserEmail] = useState<string>("");
+  const [adminChatInput, setAdminChatInput] = useState<string>("");
+  const [loadingChats, setLoadingChats] = useState(false);
+  const [sendingAdminMsg, setSendingAdminMsg] = useState(false);
 
   // Search & Filters states
   const [userSearch, setUserSearch] = useState("");
@@ -149,6 +157,60 @@ export default function AdminPanel({
   const displayError = (msg: string) => {
     setErrorMsg(msg);
     setTimeout(() => setErrorMsg(""), 4000);
+  };
+
+  // Support Chat polling logic for Admin Panel
+  React.useEffect(() => {
+    if (activeTab !== "support_chats") return;
+
+    let active = true;
+
+    const loadAllMessages = async () => {
+      try {
+        const msgs = await fetchChatMessages(undefined, true);
+        if (active) {
+          setAdminChats(msgs);
+        }
+      } catch (err) {
+        console.error("Error loading admin chats in AdminPanel:", err);
+      }
+    };
+
+    setLoadingChats(true);
+    loadAllMessages().finally(() => {
+      if (active) setLoadingChats(false);
+    });
+
+    const timer = setInterval(loadAllMessages, 5000);
+
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [activeTab]);
+
+  const handleSendAdminChatMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adminChatInput.trim() || !selectedChatUserEmail || sendingAdminMsg) return;
+
+    const messageText = adminChatInput.trim();
+    setAdminChatInput("");
+    setSendingAdminMsg(true);
+
+    try {
+      const sent = await sendChatMessage({
+        userId: selectedChatUserEmail, // User's email as the unique thread key
+        senderEmail: "komailali116@gmail.com",
+        senderName: "Noman Khan (Admin)",
+        message: messageText,
+        isAdmin: true
+      });
+      setAdminChats(prev => [...prev, sent]);
+    } catch (err: any) {
+      displayError("Could not send reply: " + (err.message || err));
+    } finally {
+      setSendingAdminMsg(false);
+    }
   };
 
   // --- STATS COMPILING ---
@@ -388,7 +450,8 @@ export default function AdminPanel({
               { id: "payments", label: "Payment Requests", icon: CreditCard },
               { id: "pricing", label: "Pricing Matrices", icon: Coins },
               { id: "content", label: "Content Hub", icon: Settings },
-              { id: "logs", label: "Activity Logs", icon: FileText }
+              { id: "logs", label: "Activity Logs", icon: FileText },
+              { id: "support_chats", label: "Direct Support Chats", icon: MessageSquare }
             ].map(tab => {
               const Icon = tab.icon;
               const isSelected = activeTab === tab.id;
@@ -1412,6 +1475,176 @@ export default function AdminPanel({
             </div>
           </div>
         )}
+
+        {/* TAB 8: DIRECT SUPPORT CHATS */}
+        {activeTab === "support_chats" && (() => {
+          // Grouping logic for messages
+          const groupedThreads: Record<string, {
+            userEmail: string;
+            userName: string;
+            messages: ChatMessage[];
+            lastMessage: ChatMessage;
+          }> = {};
+
+          adminChats.forEach(msg => {
+            const threadKey = msg.isAdmin ? msg.userId : msg.senderEmail;
+            if (!threadKey) return;
+            
+            if (!groupedThreads[threadKey]) {
+              groupedThreads[threadKey] = {
+                userEmail: threadKey,
+                userName: msg.isAdmin ? "User" : msg.senderName,
+                messages: [],
+                lastMessage: msg
+              };
+            }
+            
+            groupedThreads[threadKey].messages.push(msg);
+            
+            if (!msg.isAdmin && msg.senderName && msg.senderName !== "User") {
+              groupedThreads[threadKey].userName = msg.senderName;
+            }
+            
+            if (new Date(msg.createdAt).getTime() > new Date(groupedThreads[threadKey].lastMessage.createdAt).getTime()) {
+              groupedThreads[threadKey].lastMessage = msg;
+            }
+          });
+
+          const threadList = Object.values(groupedThreads).sort(
+            (a, b) => new Date(b.lastMessage.createdAt).getTime() - new Date(a.lastMessage.createdAt).getTime()
+          );
+
+          // Auto select first thread if none is selected
+          if (!selectedChatUserEmail && threadList.length > 0) {
+            setSelectedChatUserEmail(threadList[0].userEmail);
+          }
+
+          const activeThread = selectedChatUserEmail ? groupedThreads[selectedChatUserEmail] : null;
+
+          return (
+            <div className="bg-white border border-[#E5E1D8] rounded-3xl p-6 shadow-sm space-y-6 animate-fade-in" id="admin-support-chats-tab">
+              <div className="border-b border-[#E5E1D8]/60 pb-4">
+                <h3 className="text-base font-serif font-black text-[#1A1A1A] tracking-tight">Direct Support Chats</h3>
+                <p className="text-xs text-gray-500 mt-1">Live customer support hub. Chat directly with app users and solve their queries in real-time.</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 min-h-[500px]">
+                {/* Left side: Threads list */}
+                <div className="md:col-span-4 border border-[#E5E1D8]/60 rounded-2xl overflow-hidden flex flex-col bg-[#FDFDFD]">
+                  <div className="bg-[#F9F8F6] p-3 border-b border-[#E5E1D8]/65">
+                    <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Active Conversations ({threadList.length})</span>
+                  </div>
+                  
+                  <div className="flex-grow overflow-y-auto divide-y divide-[#E5E1D8]/40 max-h-[450px]">
+                    {threadList.length === 0 ? (
+                      <div className="p-8 text-center text-gray-400 text-xs">
+                        No active support conversations yet.
+                      </div>
+                    ) : (
+                      threadList.map((thread) => {
+                        const isSelected = selectedChatUserEmail === thread.userEmail;
+                        const lastMsg = thread.lastMessage;
+                        return (
+                          <button
+                            key={thread.userEmail}
+                            type="button"
+                            onClick={() => setSelectedChatUserEmail(thread.userEmail)}
+                            className={`w-full p-4 text-left transition-colors flex flex-col gap-1.5 cursor-pointer ${
+                              isSelected ? "bg-[#F3F0E9]/60 border-l-4 border-l-[#D4AF37]" : "hover:bg-gray-50"
+                            }`}
+                          >
+                            <div className="flex justify-between items-start">
+                              <span className="font-bold text-gray-800 text-xs truncate max-w-[130px]" title={thread.userName}>
+                                {thread.userName}
+                              </span>
+                              <span className="text-[8px] text-gray-400 font-mono shrink-0 font-bold">
+                                {new Date(lastMsg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-gray-400 truncate font-mono font-bold leading-none">{thread.userEmail}</p>
+                            <p className="text-[11px] text-gray-500 truncate mt-1">
+                              {lastMsg.isAdmin ? "You: " : ""}{lastMsg.message}
+                            </p>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                {/* Right side: Active chat message stream */}
+                <div className="md:col-span-8 border border-[#E5E1D8]/60 rounded-2xl overflow-hidden flex flex-col bg-[#FAF9F6]">
+                  {activeThread ? (
+                    <>
+                      {/* Active header */}
+                      <div className="bg-white border-b border-[#E5E1D8]/60 p-4 flex justify-between items-center">
+                        <div className="text-left">
+                          <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wide">{activeThread.userName}</h4>
+                          <p className="text-[10px] text-gray-400 font-mono font-semibold">{activeThread.userEmail}</p>
+                        </div>
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-50 border border-green-100 text-green-700 text-[10px] font-bold uppercase tracking-wider">
+                          <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-ping" />
+                          <span>Connected</span>
+                        </div>
+                      </div>
+
+                      {/* Messages stream */}
+                      <div className="flex-grow p-4 overflow-y-auto space-y-4 max-h-[350px]">
+                        {activeThread.messages.map((msg) => {
+                          const isMe = msg.isAdmin;
+                          return (
+                            <div key={msg.id} className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}>
+                              <div className="text-[9px] text-gray-400 font-mono mb-0.5 px-1">
+                                {isMe ? "You (Noman Khan)" : activeThread.userName}
+                              </div>
+                              <div className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-xs shadow-sm leading-relaxed ${
+                                isMe 
+                                  ? "bg-[#1A1C20] text-white rounded-tr-none text-left" 
+                                  : "bg-white border border-[#E5E1D8] text-gray-800 rounded-tl-none text-left"
+                              }`}>
+                                <p className="whitespace-pre-wrap break-words">{msg.message}</p>
+                              </div>
+                              <span className="text-[8px] text-gray-400 font-mono mt-1 px-1">
+                                {new Date(msg.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Reply Input bar */}
+                      <form onSubmit={handleSendAdminChatMessage} className="bg-white p-3.5 border-t border-[#E5E1D8]/60 flex items-center gap-2">
+                        <input
+                          type="text"
+                          placeholder={`Type a direct support reply to ${activeThread.userName}...`}
+                          value={adminChatInput}
+                          onChange={(e) => setAdminChatInput(e.target.value)}
+                          disabled={sendingAdminMsg}
+                          className="flex-1 py-2.5 px-3.5 text-xs bg-[#F9F8F6] border border-[#E5E1D8] rounded-xl focus:outline-none focus:border-[#D4AF37] disabled:opacity-50"
+                        />
+                        <button
+                          type="submit"
+                          disabled={!adminChatInput.trim() || sendingAdminMsg}
+                          className="p-2.5 bg-[#1A1C20] hover:bg-[#D4AF37] text-white hover:text-black rounded-xl transition-all disabled:opacity-40 disabled:hover:bg-[#1A1C20] disabled:hover:text-white cursor-pointer shadow-sm"
+                        >
+                          <Send className="w-4 h-4" />
+                        </button>
+                      </form>
+                    </>
+                  ) : (
+                    <div className="flex-grow flex flex-col items-center justify-center p-8 text-center text-gray-400 gap-3">
+                      <MessageSquare className="w-8 h-8 text-[#D4AF37] opacity-60" />
+                      <div>
+                        <h4 className="text-xs font-bold text-gray-700">No Conversation Selected</h4>
+                        <p className="text-[11px] text-gray-400 mt-0.5">Please select a user conversation from the list to begin chatting.</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
       </div>
 

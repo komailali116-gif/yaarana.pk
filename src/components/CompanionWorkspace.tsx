@@ -13,16 +13,6 @@ import { supabase } from "../supabaseClient";
 import { countUploadedPics } from "../lib/limits";
 import { SafeImage } from "./SafeImage";
 
-const PRESET_AVATARS = [
-  { url: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=400", gender: "Female", label: "Friendly Sana" },
-  { url: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=400", gender: "Female", label: "Artistic Aisha" },
-  { url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=400", gender: "Female", label: "Stylish Zara" },
-  { url: "https://images.unsplash.com/photo-1567532939604-b6b5b0db2604?auto=format&fit=crop&q=80&w=400", gender: "Female", label: "Warm Fatima" },
-  { url: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=400", gender: "Male", label: "Corporate Sameer" },
-  { url: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&q=80&w=400", gender: "Male", label: "Elegant Hamza" },
-  { url: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=400", gender: "Male", label: "Active Bilal" },
-  { url: "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?auto=format&fit=crop&q=80&w=400", gender: "Male", label: "Smart Kamran" }
-];
 
 interface CompanionWorkspaceProps {
   user: UserProfile;
@@ -34,6 +24,7 @@ interface CompanionWorkspaceProps {
   onResubmitApplication: (companionId: string) => void;
   onGoBackToRoleSelection?: () => void;
   onUpdateCompanionPhotos?: (companionId: string, photos: string[]) => void;
+  onUpdateCompanionAvatar?: (companionId: string, avatar: string) => void;
 }
 
 export default function CompanionWorkspace({
@@ -45,7 +36,8 @@ export default function CompanionWorkspace({
   onToggleOnline,
   onResubmitApplication,
   onGoBackToRoleSelection,
-  onUpdateCompanionPhotos
+  onUpdateCompanionPhotos,
+  onUpdateCompanionAvatar
 }: CompanionWorkspaceProps) {
   // Try to find if this user has already created a companion profile
   const myCompanionId = "comp_" + user.email.replace(/[@.]/g, "_");
@@ -70,6 +62,20 @@ export default function CompanionWorkspace({
   const [formError, setFormError] = useState("");
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [showLimitModal, setShowLimitModal] = useState(false);
+
+  // Live Avatar edit states (approved dashboard)
+  const [liveAvatar, setLiveAvatar] = useState("");
+  const [liveAvatarPreview, setLiveAvatarPreview] = useState("");
+  const [isUploadingLiveAvatar, setIsUploadingLiveAvatar] = useState(false);
+  const [saveAvatarSuccess, setSaveAvatarSuccess] = useState(false);
+  const [avatarError, setAvatarError] = useState("");
+
+  // Sync liveAvatar with myCompanion when loaded
+  React.useEffect(() => {
+    if (myCompanion) {
+      setLiveAvatar(myCompanion.avatar || "");
+    }
+  }, [myCompanion?.id, myCompanion?.avatar]);
 
   // Portfolio Photos states
   const [formPhotos, setFormPhotos] = useState<string[]>(() => {
@@ -179,6 +185,59 @@ export default function CompanionWorkspace({
     }
   };
 
+  const handleLiveAvatarUpload = async (file: File) => {
+    setAvatarError("");
+    setIsUploadingLiveAvatar(true);
+    
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const uid = sessionData?.session?.user?.id || "anonymous";
+      
+      const uuid = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
+      const extension = file.name.split('.').pop() || 'png';
+      const filePath = `${uid}/companions/${myCompanion?.id}/${uuid}.${extension}`;
+      
+      const { error } = await supabase.storage
+        .from("app-files")
+        .upload(filePath, file, { cacheControl: "3600", upsert: true });
+        
+      if (error) {
+        console.warn("Live avatar upload failed, falling back to Base64:", error.message);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (typeof reader.result === "string") {
+            setLiveAvatarPreview(reader.result);
+            setLiveAvatar(reader.result);
+            setIsUploadingLiveAvatar(false);
+          }
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
+      
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === "string") {
+          setLiveAvatarPreview(reader.result);
+          setLiveAvatar(filePath);
+          setIsUploadingLiveAvatar(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      setAvatarError("Upload error: " + (err.message || err));
+      setIsUploadingLiveAvatar(false);
+    }
+  };
+
+  const handleSaveLiveAvatar = () => {
+    if (onUpdateCompanionAvatar && myCompanion && liveAvatar) {
+      onUpdateCompanionAvatar(myCompanion.id, liveAvatar);
+      setSaveAvatarSuccess(true);
+      setTimeout(() => setSaveAvatarSuccess(false), 3000);
+    }
+  };
+
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setFormError("");
@@ -188,6 +247,7 @@ export default function CompanionWorkspace({
     if (!formCnic.trim()) return setFormError("Pakistani CNIC Number is required for legal safety checks.");
     if (!formBio.trim() || formBio.trim().length < 30) return setFormError("Please write a biography of at least 30 characters.");
     if (formServices.length === 0) return setFormError("Please select at least one offerable service.");
+    if (!formAvatar.trim()) return setFormError("A real profile photo is required. Please upload your actual profile photo or paste a custom photo URL.");
 
     // Simple CNIC validator check (13 digits optionally formatted with hyphens)
     const cnicClean = formCnic.replace(/-/g, "");
@@ -523,6 +583,106 @@ export default function CompanionWorkspace({
           </div>
         </div>
 
+        {/* Real Profile Photo Editor */}
+        <div className="bg-white border border-[#E5E1D8] p-6 rounded-3xl shadow-sm space-y-5 text-left">
+          <div className="border-b border-[#E5E1D8]/60 pb-3 flex justify-between items-center flex-wrap gap-2">
+            <div>
+              <h3 className="text-base font-serif font-black text-[#1A1A1A] flex items-center gap-2">
+                <User className="w-5 h-5 text-[#D4AF37]" />
+                <span>My Real Profile Photo (Visible to Customers)</span>
+              </h3>
+              <p className="text-[11px] text-gray-400">Change or upload a high-quality, real photo of yourself. Customers will see this when booking you.</p>
+            </div>
+            <div className="text-[10px] font-extrabold text-green-700 bg-green-50 border border-green-100 px-2.5 py-1 rounded-full uppercase tracking-wider">
+              Primary Photo
+            </div>
+          </div>
+
+          {avatarError && (
+            <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-red-700 text-xs font-semibold flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+              <span>{avatarError}</span>
+            </div>
+          )}
+
+          <div className="flex flex-col sm:flex-row items-center gap-6 bg-[#F9F8F6] p-5 rounded-2xl border border-[#E5E1D8]/60">
+            <div className="relative group w-24 h-24 rounded-full overflow-hidden border-2 border-[#D4AF37] shadow-md shrink-0 bg-white">
+              <SafeImage
+                src={liveAvatarPreview || liveAvatar}
+                alt="Profile Photo Preview"
+                fallbackType={myCompanion.gender as any}
+                className="w-full h-full object-cover"
+              />
+              {isUploadingLiveAvatar && (
+                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                </div>
+              )}
+            </div>
+
+            <div className="flex-1 space-y-4 w-full">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <span className="block text-[9px] font-bold text-gray-400 uppercase tracking-wider">Upload Real Photo</span>
+                  <label className="flex items-center justify-center gap-2 p-2.5 border border-dashed border-[#E5E1D8] hover:border-[#D4AF37] rounded-xl bg-white cursor-pointer transition-all hover:bg-gray-50 text-xs text-gray-650 font-semibold">
+                    <Upload className={`w-4 h-4 text-[#D4AF37] ${isUploadingLiveAvatar ? "animate-bounce" : ""}`} />
+                    <span>{isUploadingLiveAvatar ? "Uploading..." : "Select Real Photo"}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={isUploadingLiveAvatar}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleLiveAvatarUpload(file);
+                      }}
+                    />
+                  </label>
+                </div>
+
+                <div className="space-y-1">
+                  <span className="block text-[9px] font-bold text-gray-400 uppercase tracking-wider">Or Paste Photo URL</span>
+                  <input
+                    type="url"
+                    placeholder="e.g. https://images.unsplash.com/photo-..."
+                    value={liveAvatarPreview ? "" : (liveAvatar.includes("/") && !liveAvatar.startsWith("http") && !liveAvatar.startsWith("data:") ? "" : liveAvatar)}
+                    onChange={(e) => {
+                      setLiveAvatar(e.target.value);
+                      setLiveAvatarPreview("");
+                    }}
+                    className="w-full bg-white border border-[#E5E1D8] text-gray-800 rounded-xl p-2.5 text-xs focus:outline-none focus:border-[#D4AF37]"
+                  />
+                </div>
+              </div>
+
+              {liveAvatar && liveAvatar !== myCompanion.avatar && (
+                <div className="flex justify-end pt-2 border-t border-[#E5E1D8]/40">
+                  <button
+                    type="button"
+                    onClick={handleSaveLiveAvatar}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all shadow-sm flex items-center gap-1.5 cursor-pointer ${
+                      saveAvatarSuccess
+                        ? "bg-green-600 text-white"
+                        : "bg-[#D4AF37] hover:bg-[#C5A028] text-white hover:shadow-md"
+                    }`}
+                  >
+                    {saveAvatarSuccess ? (
+                      <>
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Profile Photo Saved!</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Save Profile Photo</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Personal Photos Portfolio */}
         <div className="bg-white border border-[#E5E1D8] p-6 rounded-3xl shadow-sm space-y-5 text-left">
           <div className="border-b border-[#E5E1D8]/60 pb-3 flex justify-between items-center flex-wrap gap-2">
@@ -852,49 +1012,16 @@ export default function CompanionWorkspace({
         {/* Photo URL or Direct Photo */}
         <div className="space-y-3 bg-[#F9F8F6] border border-[#E5E1D8] p-4 rounded-2xl" id="workspace-photo-section">
           <div>
-            <label className="block text-[10px] font-bold text-[#1A1A1A] uppercase tracking-widest">Assign Profile Photo</label>
-            <p className="text-[11px] text-gray-500 font-light mt-0.5">Pick a direct photo from presets, upload from your files, or paste a custom URL.</p>
-          </div>
-
-          {/* Grid of Clickable Presets */}
-          <div className="space-y-1.5">
-            <span className="block text-[9px] font-bold text-gray-400 uppercase tracking-wider">Option 1: Direct Photo Presets</span>
-            <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
-              {PRESET_AVATARS.map((preset, idx) => (
-                <button
-                  type="button"
-                  key={idx}
-                  onClick={() => {
-                    setFormAvatar(preset.url);
-                    setPresetIdx(idx);
-                  }}
-                  className={`relative aspect-square rounded-xl overflow-hidden border-2 cursor-pointer transition-all ${
-                    presetIdx === idx
-                      ? "border-[#D4AF37] ring-2 ring-[#D4AF37]/30 scale-[1.03]"
-                      : "border-[#E5E1D8] hover:border-gray-400"
-                  }`}
-                >
-                  <img
-                    src={preset.url}
-                    alt={preset.label}
-                    className="w-full h-full object-cover"
-                  />
-                  {presetIdx === idx && (
-                    <div className="absolute inset-0 bg-[#D4AF37]/10 flex items-center justify-center">
-                      <Check className="w-4 h-4 text-white bg-black/50 rounded-full p-0.5" />
-                    </div>
-                  )}
-                </button>
-              ))}
-            </div>
+            <label className="block text-[10px] font-bold text-[#1A1A1A] uppercase tracking-widest">Upload Real Profile Photo</label>
+            <p className="text-[11px] text-gray-500 font-light mt-0.5">Please upload your actual real photo. Stock photos or generic avatars are strictly prohibited. Customers will see this when selecting a companion to hire.</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
             <div>
-              <span className="block text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Option 2: Direct File Upload</span>
+              <span className="block text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Option 1: Direct File Upload (Recommended)</span>
               <label className="flex items-center justify-center gap-2 p-2.5 border border-dashed border-[#E5E1D8] hover:border-[#D4AF37] rounded-xl bg-white cursor-pointer transition-all hover:bg-gray-50 text-xs text-gray-600 font-semibold">
                 <Upload className={`w-4 h-4 text-[#D4AF37] ${isUploading ? "animate-bounce" : ""}`} />
-                <span>{isUploading ? "Uploading..." : "Upload Profile Image"}</span>
+                <span>{isUploading ? "Uploading..." : "Upload Real Profile Photo"}</span>
                 <input
                   type="file"
                   accept="image/*"
@@ -968,11 +1095,11 @@ export default function CompanionWorkspace({
             </div>
 
             <div>
-              <span className="block text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Option 3: Paste Photo URL</span>
+              <span className="block text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Option 2: Paste Photo URL</span>
               <input
                 type="url"
                 placeholder="e.g. https://images.unsplash.com/photo-..."
-                value={presetIdx >= 0 ? "" : (formAvatar.includes("/") && !formAvatar.startsWith("http") ? "" : formAvatar)}
+                value={formAvatar.includes("/") && !formAvatar.startsWith("http") && !formAvatar.startsWith("data:") ? "" : formAvatar}
                 onChange={(e) => {
                   setFormAvatar(e.target.value);
                   setAvatarPreview("");

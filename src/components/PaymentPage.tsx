@@ -22,7 +22,7 @@ interface PaymentPageProps {
   onCancel: () => void;
 }
 
-type PaymentMethod = "EasyPaisa" | "JazzCash";
+type PaymentMethod = "EasyPaisa";
 
 export default function PaymentPage({
   bookingDetail,
@@ -31,7 +31,7 @@ export default function PaymentPage({
   onSubmitSuccess,
   onCancel
 }: PaymentPageProps) {
-  const [method, setMethod] = useState<PaymentMethod>("EasyPaisa");
+  const [method] = useState<PaymentMethod>("EasyPaisa");
   const [copied, setCopied] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -39,14 +39,9 @@ export default function PaymentPage({
 
   const paymentDetails = {
     EasyPaisa: {
-      accountNumber: "03095523073",
-      accountTitle: "MUHAMMAD ASHRAF",
+      accountNumber: "03173223559",
+      accountTitle: "NOMAN KHAN",
       instructions: "Transfer the amount via EasyPaisa App or USSD code."
-    },
-    JazzCash: {
-      accountNumber: "03009453388",
-      accountTitle: "SHAHZAIB",
-      instructions: "Transfer the amount via JazzCash App or USSD code."
     }
   };
 
@@ -188,28 +183,15 @@ export default function PaymentPage({
 
       <div className="text-center space-y-1">
         <h3 className="text-xl font-serif font-bold text-[#1A1A1A]">Manual Payment Checkout</h3>
-        <p className="text-xs text-gray-500">Choose your preferred payment method and follow the details below.</p>
+        <p className="text-xs text-gray-500">Please make the payment transfer to the official EasyPaisa account below.</p>
       </div>
 
-      {/* Payment Method Selector */}
-      <div className="grid grid-cols-2 gap-2.5">
-        {(["EasyPaisa", "JazzCash"] as PaymentMethod[]).map((m) => (
-          <button
-            key={m}
-            type="button"
-            onClick={() => setMethod(m)}
-            className={`py-3 px-2 rounded-xl border text-xs font-bold transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer shadow-sm ${
-              method === m
-                ? m === "EasyPaisa"
-                  ? "bg-[#3ebd5c]/5 border-[#3ebd5c] text-[#3ebd5c] scale-[1.02]"
-                  : "bg-[#cb1c24]/5 border-[#cb1c24] text-[#cb1c24] scale-[1.02]"
-                : "bg-white border-[#E5E1D8] hover:bg-gray-50 text-gray-600"
-            }`}
-          >
-            <Smartphone className="w-4 h-4" />
-            <span>{m}</span>
-          </button>
-        ))}
+      {/* Payment Method Badge */}
+      <div className="flex items-center justify-center">
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-[#3ebd5c]/10 border border-[#3ebd5c]/30 text-[#2a8b41] font-bold text-xs uppercase tracking-wider">
+          <Smartphone className="w-4 h-4 text-[#3ebd5c]" />
+          <span>EasyPaisa Official Account</span>
+        </div>
       </div>
 
       {/* Payment Details Container */}
