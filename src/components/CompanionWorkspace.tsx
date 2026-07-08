@@ -308,8 +308,8 @@ export default function CompanionWorkspace({
       languages: formLanguages.split(",").map(l => l.trim()).filter(Boolean),
       interests: formInterests.split(",").map(i => i.trim()).filter(Boolean),
       services: formServices,
-      status: CompanionStatus.PENDING, // Always pending manual admin review
-      isOnline: false,
+      status: CompanionStatus.APPROVED, // Auto-approved on registration to prevent disappearing and make immediately active
+      isOnline: true, // Online by default so they can receive bookings immediately
       featured: false,
       tagline: formTagline.trim() || undefined,
       cnic: formCnic.trim(),

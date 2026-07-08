@@ -362,6 +362,15 @@ export default function App() {
             return mapped;
           })
         );
+        // Merge any custom local companions that are not present in the database to prevent them from disappearing
+        const localComps = getStoredCompanions();
+        const dbIds = new Set(resolvedCompanions.map(rc => rc.id));
+        const missingLocals = localComps.filter(lc => !dbIds.has(lc.id));
+        if (missingLocals.length > 0) {
+          console.log("Merging missing custom local companions:", missingLocals);
+          resolvedCompanions = [...resolvedCompanions, ...missingLocals];
+        }
+
         setCompanions(resolvedCompanions);
       } else {
         const localComps = getStoredCompanions();
