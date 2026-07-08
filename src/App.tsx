@@ -125,11 +125,13 @@ function mapCompanionFromDB(c: any): Companion {
 }
 
 function mapCompanionToDB(c: Companion, userId?: string | null): any {
+  console.log("[mapCompanionToDB] Input companion object:", JSON.stringify(c, null, 2));
+  console.log("[mapCompanionToDB] Input userId passed:", userId);
   const tier = c.pricingTier || "Silver";
   const photosStr = c.photos && c.photos.length > 0 ? `[Photos:${JSON.stringify(c.photos)}]` : "";
   const packedTagline = `[Tier:${tier}]${photosStr}${c.tagline || ""}`;
 
-  return {
+  const mapped = {
     id: c.id,
     name: c.name || "Yarana Companion",
     age: c.age ? Number(c.age) : 21,
@@ -151,6 +153,9 @@ function mapCompanionToDB(c: Companion, userId?: string | null): any {
     user_id: userId !== undefined ? userId : (c.userId || null),
     created_at: new Date().toISOString()
   };
+
+  console.log("[mapCompanionToDB] Output mapped record to be sent to database:", JSON.stringify(mapped, null, 2));
+  return mapped;
 }
 
 function mapBookingFromDB(b: any): Booking {
@@ -1215,6 +1220,8 @@ export default function App() {
 
   // ADMIN ACTION: Register new companion
   const handleAddNewCompanion = async (newComp: Companion) => {
+    console.log("[handleAddNewCompanion] Triggered with original object:", JSON.stringify(newComp, null, 2));
+
     // Explicitly apply defaults to ensure all required fields are present and correctly typed
     const finalizedComp: Companion = {
       ...newComp,
@@ -1227,20 +1234,25 @@ export default function App() {
       interests: newComp.interests || [],
       services: newComp.services || []
     };
+    console.log("[handleAddNewCompanion] finalizedComp after explicitly applying defaults:", JSON.stringify(finalizedComp, null, 2));
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const uid = session?.user?.id;
+      console.log("[handleAddNewCompanion] Authenticated Supabase session user ID:", uid);
       if (uid) {
         const isHost = user?.selectedRole === "companion";
         const isAppAdmin = user?.isAdmin;
         const hasNoLimits = isAppAdmin || isHost;
+        console.log("[handleAddNewCompanion] user properties:", { isHost, isAppAdmin, hasNoLimits });
 
         if (!hasNoLimits) {
           const isCustomAvatar = finalizedComp.avatar && !finalizedComp.avatar.startsWith("http") && !finalizedComp.avatar.startsWith("data:");
           if (isCustomAvatar) {
             const picCount = await countUploadedPics(uid);
+            console.log("[handleAddNewCompanion] Check pic limit. Current picture count is:", picCount);
             if (picCount >= 3) {
+              console.warn("[handleAddNewCompanion] Upload limit reached. Showing limit modal.");
               setShowLimitModal(true);
               return;
             }
@@ -1248,15 +1260,17 @@ export default function App() {
         }
       }
     } catch (err) {
-      console.error("Failed limit check in handleAddNewCompanion:", err);
+      console.error("[handleAddNewCompanion] Failed limit check in handleAddNewCompanion:", err);
     }
 
     const updatedCompanions = [...companions, finalizedComp];
+    console.log("[handleAddNewCompanion] Updating companions state. Total count:", updatedCompanions.length);
     setCompanions(updatedCompanions);
     saveStoredCompanions(updatedCompanions);
 
     // Automatically transition registering hosts to the companion role
     if (user && !user.isAdmin && user.selectedRole !== "companion") {
+      console.log("[handleAddNewCompanion] Transitioning user role to companion...");
       const updatedUser = { ...user, selectedRole: "companion" as const };
       handleUpdateProfile(updatedUser);
     }
@@ -1264,8 +1278,9 @@ export default function App() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const targetUserId = (user && user.isAdmin) ? null : (session ? session.user.id : null);
+      console.log("[handleAddNewCompanion] Preparing DB insert. targetUserId:", targetUserId);
       const dbRecord = mapCompanionToDB(finalizedComp, targetUserId);
-      console.log("Saving companion to Supabase database...", dbRecord);
+      console.log("[handleAddNewCompanion] Saving companion to Supabase database (calling .insert(dbRecord)). Record contents:", JSON.stringify(dbRecord, null, 2));
       
       const { data, error } = await supabase
         .from("companions")
@@ -1273,22 +1288,36 @@ export default function App() {
         .select();
 
       if (error) {
-        console.error("Supabase error inserting companion:", error);
-        console.log("Attempting upsert as fallback...");
+        console.error("[handleAddNewCompanion] Supabase INSERT error occurred:", {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint
+        });
+        console.log("[handleAddNewCompanion] Attempting UPSERT as a fallback mechanism...");
         const { data: upsertData, error: upsertError } = await supabase
           .from("companions")
           .upsert(dbRecord)
           .select();
         if (upsertError) {
-          console.error("Supabase fallback upsert also failed:", upsertError);
+          console.error("[handleAddNewCompanion] Supabase fallback UPSERT also failed! Details:", {
+            message: upsertError.message,
+            code: upsertError.code,
+            details: upsertError.details,
+            hint: upsertError.hint
+          });
         } else {
-          console.log("Companion upserted successfully in database:", upsertData);
+          console.log("[handleAddNewCompanion] Companion UPSERTED successfully in database:", JSON.stringify(upsertData, null, 2));
         }
       } else {
-        console.log("Companion created successfully in Supabase database:", data);
+        console.log("[handleAddNewCompanion] Companion INSERTED successfully in Supabase database:", JSON.stringify(data, null, 2));
       }
-    } catch (err) {
-      console.error("Failed to create new companion in Supabase database (catch):", err);
+    } catch (err: any) {
+      console.error("[handleAddNewCompanion] Exception thrown in database save flow:", {
+        error: err,
+        message: err?.message,
+        stack: err?.stack
+      });
     }
   };
 
