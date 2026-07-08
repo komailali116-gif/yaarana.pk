@@ -619,6 +619,7 @@ export default function App() {
           bio: updatedFields.bio || data.bio,
           tagline: rawTagline,
           is_online: updatedFields.isOnline !== undefined ? updatedFields.isOnline : data.is_online,
+          services: updatedFields.services || data.services,
         }).eq("id", id);
 
         if (error) throw error;
@@ -1354,6 +1355,7 @@ export default function App() {
                   onToggleOnline={handleToggleOnline}
                   onUpdateCompanionPhotos={handleUpdateCompanionPhotos}
                   onUpdateCompanionAvatar={handleUpdateCompanionAvatar}
+                  onEditCompanionProfile={handleEditCompanionProfile}
                   onResubmitApplication={async (companionId) => {
                     const updated = companions.filter(c => c.id !== companionId);
                     setCompanions(updated);

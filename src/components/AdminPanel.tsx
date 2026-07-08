@@ -142,6 +142,13 @@ export default function AdminPanel({
   const [newCompLanguages, setNewCompLanguages] = useState("Urdu, English");
   const [newCompInterests, setNewCompInterests] = useState("Reading, Coffee, Movies");
   const [newCompServices, setNewCompServices] = useState<string[]>(["dining", "call", "study"]);
+  const handleAdminNewCompServiceToggle = (serviceId: string) => {
+    if (newCompServices.includes(serviceId)) {
+      setNewCompServices(newCompServices.filter(id => id !== serviceId));
+    } else {
+      setNewCompServices([...newCompServices, serviceId]);
+    }
+  };
   const [newCompAvatar, setNewCompAvatar] = useState("");
   const [newCompTier, setNewCompTier] = useState<"Silver" | "Gold" | "Platinum">("Silver");
   const [newCompTagline, setNewCompTagline] = useState("");
@@ -894,6 +901,30 @@ export default function AdminPanel({
                     onChange={(e) => setNewCompBio(e.target.value)}
                     className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-2.5 px-3.5 focus:outline-none focus:border-[#D4AF37] resize-none"
                   />
+                </div>
+
+                {/* Offerable Services */}
+                <div className="space-y-1">
+                  <label className="font-bold text-gray-400 uppercase tracking-widest text-[9px] block">Select Offered Services</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                    {SERVICES.map(s => {
+                      const isSelected = newCompServices.includes(s.id);
+                      return (
+                        <button
+                          type="button"
+                          key={s.id}
+                          onClick={() => handleAdminNewCompServiceToggle(s.id)}
+                          className={`p-2.5 border rounded-xl text-[10px] font-semibold transition-all cursor-pointer ${
+                            isSelected 
+                              ? "bg-[#1A1C20] text-white border-black" 
+                              : "bg-[#F3F0E9]/20 hover:bg-gray-100 border-[#E5E1D8]/60 text-gray-600"
+                          }`}
+                        >
+                          {s.name}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* Portfolio picture onboarding */}
@@ -1797,6 +1828,39 @@ export default function AdminPanel({
                     onChange={(e) => setEditingCompanion({ ...editingCompanion, bio: e.target.value })}
                     className="w-full bg-[#F3F0E9]/20 border border-[#E5E1D8] rounded-xl py-2 px-3 text-gray-800 resize-none"
                   />
+                </div>
+
+                {/* Services selection */}
+                <div className="space-y-1">
+                  <label className="font-bold text-gray-400 uppercase tracking-widest text-[9px] block">Offered Services</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                    {SERVICES.map(s => {
+                      const isSelected = (editingCompanion.services || []).includes(s.id);
+                      return (
+                        <button
+                          type="button"
+                          key={s.id}
+                          onClick={() => {
+                            const currentServices = editingCompanion.services || [];
+                            const nextServices = currentServices.includes(s.id)
+                              ? currentServices.filter(id => id !== s.id)
+                              : [...currentServices, s.id];
+                            setEditingCompanion({
+                              ...editingCompanion,
+                              services: nextServices
+                            });
+                          }}
+                          className={`p-2 border rounded-xl text-[10px] font-semibold transition-all cursor-pointer ${
+                            isSelected 
+                              ? "bg-[#1A1C20] text-white border-black" 
+                              : "bg-[#F3F0E9]/20 hover:bg-gray-100 border-[#E5E1D8]/60 text-gray-600"
+                          }`}
+                        >
+                          {s.name}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <button

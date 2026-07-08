@@ -25,6 +25,7 @@ interface CompanionWorkspaceProps {
   onGoBackToRoleSelection?: () => void;
   onUpdateCompanionPhotos?: (companionId: string, photos: string[]) => void;
   onUpdateCompanionAvatar?: (companionId: string, avatar: string) => void;
+  onEditCompanionProfile?: (companionId: string, updatedFields: Partial<Companion>) => Promise<void>;
 }
 
 export default function CompanionWorkspace({
@@ -37,7 +38,8 @@ export default function CompanionWorkspace({
   onResubmitApplication,
   onGoBackToRoleSelection,
   onUpdateCompanionPhotos,
-  onUpdateCompanionAvatar
+  onUpdateCompanionAvatar,
+  onEditCompanionProfile
 }: CompanionWorkspaceProps) {
   // Try to find if this user has already created a companion profile
   const myCompanionId = "comp_" + user.email.replace(/[@.]/g, "_");
@@ -76,6 +78,38 @@ export default function CompanionWorkspace({
       setLiveAvatar(myCompanion.avatar || "");
     }
   }, [myCompanion?.id, myCompanion?.avatar]);
+
+  // Live Services edit states (approved dashboard)
+  const [liveServices, setLiveServices] = useState<string[]>([]);
+  const [saveServicesSuccess, setSaveServicesSuccess] = useState(false);
+
+  // Sync liveServices with myCompanion when loaded
+  React.useEffect(() => {
+    if (myCompanion) {
+      setLiveServices(myCompanion.services || []);
+    }
+  }, [myCompanion?.id, myCompanion?.services]);
+
+  const handleLiveServiceToggle = (serviceId: string) => {
+    if (liveServices.includes(serviceId)) {
+      setLiveServices(liveServices.filter(id => id !== serviceId));
+    } else {
+      setLiveServices([...liveServices, serviceId]);
+    }
+    setSaveServicesSuccess(false);
+  };
+
+  const handleSaveLiveServices = async () => {
+    if (liveServices.length === 0) {
+      alert("Please select at least one offerable service.");
+      return;
+    }
+    if (onEditCompanionProfile && myCompanion) {
+      await onEditCompanionProfile(myCompanion.id, { services: liveServices });
+      setSaveServicesSuccess(true);
+      setTimeout(() => setSaveServicesSuccess(false), 3000);
+    }
+  };
 
   // Portfolio Photos states
   const [formPhotos, setFormPhotos] = useState<string[]>(() => {
@@ -819,6 +853,60 @@ export default function CompanionWorkspace({
               ) : (
                 <>
                   <span>Save Portfolio Photos</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Manage My Offerable Services */}
+        <div className="bg-white border border-[#E5E1D8] p-6 rounded-3xl shadow-sm space-y-5 text-left">
+          <div className="border-b border-[#E5E1D8]/60 pb-3">
+            <h3 className="text-base font-serif font-black text-[#1A1A1A] flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-[#D4AF37]" />
+              <span>My Offerable Services</span>
+            </h3>
+            <p className="text-[11px] text-gray-400">Select which companionship services you currently offer. Customers will only be able to book you for these chosen services.</p>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+            {SERVICES.map(s => {
+              const isSelected = liveServices.includes(s.id);
+              return (
+                <button
+                  type="button"
+                  key={s.id}
+                  onClick={() => handleLiveServiceToggle(s.id)}
+                  className={`p-2.5 border rounded-xl text-[11px] font-semibold transition-all cursor-pointer ${
+                    isSelected 
+                      ? "bg-[#1A1C20] text-white border-black shadow-sm" 
+                      : "bg-[#F3F0E9]/20 hover:bg-gray-100 border-[#E5E1D8]/60 text-gray-600"
+                  }`}
+                >
+                  {s.name}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex justify-end pt-2 border-t border-[#E5E1D8]/40">
+            <button
+              type="button"
+              onClick={handleSaveLiveServices}
+              className={`px-5 py-2.5 rounded-xl text-xs font-bold uppercase transition-all shadow-sm flex items-center gap-2 cursor-pointer ${
+                saveServicesSuccess
+                  ? "bg-green-600 text-white"
+                  : "bg-[#1A1A1A] hover:bg-black text-white hover:shadow-md"
+              }`}
+            >
+              {saveServicesSuccess ? (
+                <>
+                  <Check className="w-4 h-4" />
+                  <span>Services Saved!</span>
+                </>
+              ) : (
+                <>
+                  <span>Save Offerable Services</span>
                 </>
               )}
             </button>
