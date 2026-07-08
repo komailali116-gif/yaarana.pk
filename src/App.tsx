@@ -1321,6 +1321,34 @@ export default function App() {
     }
   };
 
+  // ADMIN ACTION: Wipe all companion listings from DB and local storage
+  const handleWipeAllCompanions = async () => {
+    console.log("[handleWipeAllCompanions] Attempting to delete all companion data...");
+    
+    // 1. Clear local state and update local storage with an empty array
+    setCompanions([]);
+    saveStoredCompanions([]);
+
+    // 2. Clear companions in Supabase database
+    try {
+      const { error } = await supabase
+        .from("companions")
+        .delete()
+        .neq("id", "_none_"); // Matches and deletes all rows
+
+      if (error) {
+        console.error("[handleWipeAllCompanions] Supabase error deleting companions:", error);
+        alert("Failed to delete companions from database: " + error.message);
+      } else {
+        console.log("[handleWipeAllCompanions] Successfully cleared all companion data from database.");
+        alert("Success: All companion data has been wiped from database and local storage.");
+      }
+    } catch (err: any) {
+      console.error("[handleWipeAllCompanions] Exception during wipe:", err);
+      alert("Error wiping data: " + (err?.message || err));
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#F9F8F6] text-[#2D2D2D] font-sans flex flex-col justify-between selection:bg-[#D4AF37] selection:text-black" id="yarana-app-root">
       
@@ -1496,6 +1524,7 @@ export default function App() {
                   onSuspendUser={handleSuspendUser}
                   onDeleteUser={handleDeleteUser}
                   onEditCompanionProfile={handleEditCompanionProfile}
+                  onWipeAllCompanions={handleWipeAllCompanions}
                 />
               )}
             </div>

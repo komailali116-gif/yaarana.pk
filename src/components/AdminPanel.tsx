@@ -37,6 +37,7 @@ interface AdminPanelProps {
   onSuspendUser: (userId: string, isSuspended: boolean) => Promise<void>;
   onDeleteUser: (userId: string) => Promise<void>;
   onEditCompanionProfile: (id: string, updatedFields: Partial<Companion>) => Promise<void>;
+  onWipeAllCompanions?: () => void;
 }
 
 export default function AdminPanel({
@@ -57,7 +58,8 @@ export default function AdminPanel({
   onUpdateSettings,
   onSuspendUser,
   onDeleteUser,
-  onEditCompanionProfile
+  onEditCompanionProfile,
+  onWipeAllCompanions
 }: AdminPanelProps) {
   // Strict Owner Guard check
   const isAuthorizedOwner = user?.email?.toLowerCase() === "komailali116@gmail.com";
@@ -991,7 +993,22 @@ export default function AdminPanel({
                   <h3 className="text-base font-serif font-black text-[#1A1A1A] tracking-tight">Companions Catalog Matrix</h3>
                   <p className="text-xs text-gray-500 mt-1">Change levels, audit profiles, adjust online visibility, or reject applications.</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center flex-wrap">
+                  {onWipeAllCompanions && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm("🔴 DANGER: Are you absolutely sure you want to delete ALL companion data from BOTH the cloud database and local storage? This cannot be undone!")) {
+                          onWipeAllCompanions();
+                        }
+                      }}
+                      className="bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 font-bold px-3 py-1.5 rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                      title="Wipe all companion listings permanently"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Wipe All Data
+                    </button>
+                  )}
                   <input
                     type="text"
                     placeholder="Filter by name..."
