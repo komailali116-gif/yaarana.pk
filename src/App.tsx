@@ -1232,11 +1232,40 @@ export default function App() {
     setCompanions(updatedCompanions);
     saveStoredCompanions(updatedCompanions);
 
+    // Automatically transition registering hosts to the companion role
+    if (user && !user.isAdmin && user.selectedRole !== "companion") {
+      const updatedUser = { ...user, selectedRole: "companion" as const };
+      handleUpdateProfile(updatedUser);
+    }
+
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      await supabase.from("companions").insert(mapCompanionToDB(newComp, session ? session.user.id : null));
+      const targetUserId = (user && user.isAdmin) ? null : (session ? session.user.id : null);
+      const dbRecord = mapCompanionToDB(newComp, targetUserId);
+      console.log("Saving companion to Supabase database...", dbRecord);
+      
+      const { data, error } = await supabase
+        .from("companions")
+        .insert(dbRecord)
+        .select();
+
+      if (error) {
+        console.error("Supabase error inserting companion:", error);
+        console.log("Attempting upsert as fallback...");
+        const { data: upsertData, error: upsertError } = await supabase
+          .from("companions")
+          .upsert(dbRecord)
+          .select();
+        if (upsertError) {
+          console.error("Supabase fallback upsert also failed:", upsertError);
+        } else {
+          console.log("Companion upserted successfully in database:", upsertData);
+        }
+      } else {
+        console.log("Companion created successfully in Supabase database:", data);
+      }
     } catch (err) {
-      console.error("Failed to create new companion in Supabase database:", err);
+      console.error("Failed to create new companion in Supabase database (catch):", err);
     }
   };
 
