@@ -89,6 +89,9 @@ export default function AdminPanel({
   const [activeTab, setActiveTab] = useState<"dashboard" | "users" | "companions" | "payments" | "pricing" | "content" | "logs" | "support_chats">("dashboard");
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  const [showRlsModal, setShowRlsModal] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditResult, setAuditResult] = useState<any>(null);
 
   // Support Chats panel states
   const [adminChats, setAdminChats] = useState<ChatMessage[]>([]);
@@ -994,6 +997,15 @@ export default function AdminPanel({
                   <p className="text-xs text-gray-500 mt-1">Change levels, audit profiles, adjust online visibility, or reject applications.</p>
                 </div>
                 <div className="flex gap-2 items-center flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setShowRlsModal(true)}
+                    className="bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 font-bold px-3 py-1.5 rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                    title="View Supabase Row Level Security (RLS) Policies"
+                  >
+                    <Shield className="w-3.5 h-3.5 text-amber-600" />
+                    <span>RLS Policies Docs</span>
+                  </button>
                   {onWipeAllCompanions && (
                     <button
                       type="button"
@@ -2090,6 +2102,297 @@ export default function AdminPanel({
               >
                 <X className="w-6 h-6" />
               </button>
+            </motion.div>
+          </div>
+        )}
+
+        {/* ADMIN RLS POLICY DOCUMENTATION & PROBE AUDIT MATRIX */}
+        {showRlsModal && (
+          <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              className="relative bg-[#F9F8F6] border border-[#E5E1D8] max-w-4xl w-full rounded-3xl shadow-2xl p-6 sm:p-8 flex flex-col gap-6 max-h-[90vh] overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex justify-between items-start pb-4 border-b border-[#E5E1D8]">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-amber-50 rounded-2xl border border-amber-200 text-amber-700">
+                    <Shield className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-serif font-black text-[#1A1A1A] tracking-tight">
+                      Shield RLS Policy &amp; Constraint Matrix
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Live audit log, policy definitions, and access constraints for the <code className="bg-[#F3F0E9] px-1 rounded font-mono text-[11px] text-amber-800">companions</code> table.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowRlsModal(false);
+                    setAuditResult(null);
+                  }}
+                  className="p-1.5 hover:bg-[#F3F0E9] rounded-xl text-gray-400 hover:text-black transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Scrollable Content wrapper */}
+              <div className="flex-grow overflow-y-auto pr-1 space-y-6 text-xs text-gray-600">
+                
+                {/* Section 1: Live connection probe audit */}
+                <div className="bg-white border border-[#E5E1D8] rounded-2xl p-4 sm:p-5 shadow-sm space-y-4">
+                  <div className="flex justify-between items-center flex-wrap gap-2">
+                    <div className="space-y-0.5">
+                      <h4 className="font-bold text-gray-900 flex items-center gap-1.5">
+                        <Activity className="w-3.5 h-3.5 text-emerald-500 animate-pulse" />
+                        Live Connectivity &amp; Access Probe Tester
+                      </h4>
+                      <p className="text-[11px] text-gray-500">
+                        Perform a live select probe to verify if the client bypasses or satisfies the active security policies.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={auditLoading}
+                      onClick={async () => {
+                        setAuditLoading(true);
+                        setAuditResult(null);
+                        try {
+                          const { data: { session } } = await supabase.auth.getSession();
+                          const startTime = performance.now();
+                          const { data, error } = await supabase
+                            .from("companions")
+                            .select("id, name, status, created_at")
+                            .limit(1);
+                          const endTime = performance.now();
+                          
+                          setAuditResult({
+                            success: !error,
+                            latencyMs: Math.round(endTime - startTime),
+                            currentUserEmail: session?.user?.email || "No active auth session (Guest)",
+                            currentUserId: session?.user?.id || "None",
+                            isProjectOwnerAdmin: session?.user?.email?.toLowerCase() === "komailali116@gmail.com",
+                            rowsCountFetched: data ? data.length : 0,
+                            dataSample: data && data.length > 0 ? data[0] : null,
+                            error: error ? {
+                              message: error.message,
+                              code: error.code,
+                              details: error.details,
+                              hint: error.hint
+                            } : null
+                          });
+                        } catch (err: any) {
+                          setAuditResult({
+                            success: false,
+                            error: {
+                              message: err?.message || String(err),
+                              code: "CLIENT_EXCEPTION"
+                            }
+                          });
+                        } finally {
+                          setAuditLoading(false);
+                        }
+                      }}
+                      className="bg-[#1A1C20] hover:bg-[#D4AF37] text-white hover:text-black transition-colors font-bold px-4 py-2 rounded-xl text-[11px] flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                    >
+                      {auditLoading ? (
+                        <>
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                          <span>Testing...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-3 h-3" />
+                          <span>Trigger Table Probe</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {auditResult && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className={`border p-4 rounded-xl font-mono text-[11px] space-y-2 ${
+                        auditResult.success 
+                          ? "bg-emerald-50/40 border-emerald-200 text-emerald-950" 
+                          : "bg-red-50/40 border-red-200 text-red-950"
+                      }`}
+                    >
+                      <div className="flex justify-between items-center font-bold">
+                        <span className="flex items-center gap-1">
+                          {auditResult.success ? "✅ PROBE COMPLETED: SUCCESS" : "❌ PROBE COMPLETED: FAILED"}
+                        </span>
+                        <span className="text-gray-500 font-normal">Latency: {auditResult.latencyMs}ms</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 pt-1 border-t border-dashed border-gray-200 text-[10px]">
+                        <div><span className="font-bold">Active User Email:</span> {auditResult.currentUserEmail}</div>
+                        <div><span className="font-bold">Target Owner (komailali116@gmail.com):</span> {auditResult.isProjectOwnerAdmin ? "YES (Admins Write Approved)" : "NO (Non-admin limitations apply)"}</div>
+                        <div><span className="font-bold">User UUID:</span> {auditResult.currentUserId}</div>
+                        <div><span className="font-bold">Returned Count:</span> {auditResult.rowsCountFetched} listings</div>
+                      </div>
+                      
+                      {auditResult.success ? (
+                        <p className="text-[10px] text-emerald-800 bg-emerald-100/60 p-2 rounded-lg mt-2 leading-relaxed">
+                          🛡️ <strong>SELECT Policy OK:</strong> All guests &amp; authenticated clients are allowed to browse the Approved companions catalogue freely under the public read rule.
+                        </p>
+                      ) : (
+                        <div className="bg-red-150/40 p-2.5 rounded-lg mt-2 text-[10px] space-y-1">
+                          <p className="font-bold text-red-700">Detailed error response received from Supabase:</p>
+                          <pre className="overflow-x-auto whitespace-pre-wrap text-[9px] text-red-900 bg-white/60 p-1.5 rounded">{JSON.stringify(auditResult.error, null, 2)}</pre>
+                        </div>
+                      )}
+                    </motion.div>
+                  )}
+                </div>
+
+                {/* Section 2: Active RLS Policies breakdown list */}
+                <div className="space-y-3">
+                  <h4 className="font-bold text-gray-900 uppercase tracking-wider text-[10px]">Active Policies Configured in Database</h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Policy 1 */}
+                    <div className="bg-white border border-[#E5E1D8] rounded-2xl p-4 space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="px-2 py-0.5 bg-sky-50 text-sky-700 font-bold rounded-lg text-[9px] uppercase tracking-widest border border-sky-200">SELECT</span>
+                        <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-0.5">● Enabled</span>
+                      </div>
+                      <h5 className="font-bold text-gray-900 text-[11px]">Companions are viewable by everyone</h5>
+                      <p className="text-[11px] text-gray-500 leading-relaxed">
+                        Allows unrestricted public select query capabilities on the companions table so that clients can browse listings without logging in.
+                      </p>
+                      <pre className="bg-[#F3F0E9]/40 border border-[#E5E1D8]/40 p-2 rounded-lg font-mono text-[9px] text-gray-600 overflow-x-auto">
+{`CREATE POLICY "Companions are viewable by everyone" 
+ON companions FOR SELECT USING (true);`}
+                      </pre>
+                    </div>
+
+                    {/* Policy 2 */}
+                    <div className="bg-white border border-[#E5E1D8] rounded-2xl p-4 space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-bold rounded-lg text-[9px] uppercase tracking-widest border border-emerald-200">INSERT</span>
+                        <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-0.5">● Enabled</span>
+                      </div>
+                      <h5 className="font-bold text-gray-900 text-[11px]">Onboard Authenticated Users</h5>
+                      <p className="text-[11px] text-gray-500 leading-relaxed">
+                        Ensures logged-in users can safely onboard. They can map the companion profile back to their authenticated `auth.uid()`, or let the platform register it.
+                      </p>
+                      <pre className="bg-[#F3F0E9]/40 border border-[#E5E1D8]/40 p-2 rounded-lg font-mono text-[9px] text-gray-600 overflow-x-auto">
+{`CREATE POLICY "Authenticated insert" 
+ON companions FOR INSERT TO authenticated 
+WITH CHECK (auth.uid() = user_id OR user_id IS NULL OR 
+(auth.jwt() ->> 'email') = 'komailali116@gmail.com');`}
+                      </pre>
+                    </div>
+
+                    {/* Policy 3 */}
+                    <div className="bg-white border border-[#E5E1D8] rounded-2xl p-4 space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 font-bold rounded-lg text-[9px] uppercase tracking-widest border border-indigo-200">UPDATE</span>
+                        <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-0.5">● Enabled</span>
+                      </div>
+                      <h5 className="font-bold text-gray-900 text-[11px]">Self Profile Updates</h5>
+                      <p className="text-[11px] text-gray-500 leading-relaxed">
+                        Guards companion records from being maliciously altered by other users. Users can only modify rows where `user_id` matches their verified token `auth.uid()`.
+                      </p>
+                      <pre className="bg-[#F3F0E9]/40 border border-[#E5E1D8]/40 p-2 rounded-lg font-mono text-[9px] text-gray-600 overflow-x-auto">
+{`CREATE POLICY "Companions update self" 
+ON companions FOR UPDATE TO authenticated 
+USING (auth.uid() = user_id) 
+WITH CHECK (auth.uid() = user_id);`}
+                      </pre>
+                    </div>
+
+                    {/* Policy 4 */}
+                    <div className="bg-white border border-[#E5E1D8] rounded-2xl p-4 space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="px-2 py-0.5 bg-amber-50 text-amber-700 font-bold rounded-lg text-[9px] uppercase tracking-widest border border-amber-200">ALL</span>
+                        <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-0.5">● Enabled</span>
+                      </div>
+                      <h5 className="font-bold text-gray-900 text-[11px]">Admins Full Override Bypass</h5>
+                      <p className="text-[11px] text-gray-500 leading-relaxed">
+                        Enforces zero-delay full permission overrides for authorized platform admins whose signed-in JWT token email claim is `komailali116@gmail.com`.
+                      </p>
+                      <pre className="bg-[#F3F0E9]/40 border border-[#E5E1D8]/40 p-2 rounded-lg font-mono text-[9px] text-gray-600 overflow-x-auto">
+{`CREATE POLICY "Admins full write access" 
+ON companions FOR ALL TO authenticated 
+USING ((auth.jwt() ->> 'email') = 'komailali116@gmail.com') 
+WITH CHECK ((auth.jwt() ->> 'email') = 'komailali116@gmail.com');`}
+                      </pre>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 3: Re-apply policy copy helper */}
+                <div className="bg-white border border-[#E5E1D8] rounded-2xl p-5 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <h4 className="font-bold text-gray-900 flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5 text-amber-600" />
+                      SQL Policy Blueprint For Quick DB Reset
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const sqlText = `-- COMPANIONS TABLE SECURITY POLICY BLUEPRINT\nALTER TABLE companions ENABLE ROW LEVEL SECURITY;\n\nDROP POLICY IF EXISTS "Companions are viewable by everyone" ON companions;\nCREATE POLICY "Companions are viewable by everyone" ON companions\n  FOR SELECT USING (true);\n\nDROP POLICY IF EXISTS "Authenticated users can onboard themselves as companions" ON companions;\nCREATE POLICY "Authenticated users can onboard themselves as companions" ON companions\n  FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id OR user_id IS NULL OR (auth.jwt() ->> 'email') = 'komailali116@gmail.com');\n\nDROP POLICY IF EXISTS "Companions can update their own profile" ON companions;\nCREATE POLICY "Companions can update their own profile" ON companions\n  FOR UPDATE TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);\n\nDROP POLICY IF EXISTS "Admins have full write access on companions" ON companions;\nCREATE POLICY "Admins have full write access on companions" ON companions\n  FOR ALL TO authenticated USING ((auth.jwt() ->> 'email') = 'komailali116@gmail.com')\n  WITH CHECK ((auth.jwt() ->> 'email') = 'komailali116@gmail.com');`;
+                        navigator.clipboard.writeText(sqlText);
+                        alert("✅ Full SQL query script copied to your clipboard successfully!");
+                      }}
+                      className="bg-[#F3F0E9] hover:bg-[#E5E1D8] text-[#1A1A1A] font-bold px-3 py-1.5 rounded-xl text-[10px] transition-colors cursor-pointer"
+                    >
+                      Copy SQL Script
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-gray-500 leading-relaxed">
+                    If you encounter any unauthorized write restrictions or constraint failures during testing, run the copied SQL commands directly in your Supabase SQL Editor to reset all table policies cleanly.
+                  </p>
+                  <pre className="bg-[#1A1C20] p-4 rounded-xl font-mono text-[9.5px] text-amber-400 overflow-x-auto max-h-[160px] leading-relaxed">
+{`-- 1. Enable RLS
+ALTER TABLE companions ENABLE ROW LEVEL SECURITY;
+
+-- 2. Drop existing rules
+DROP POLICY IF EXISTS "Companions are viewable by everyone" ON companions;
+DROP POLICY IF EXISTS "Authenticated users can onboard themselves as companions" ON companions;
+DROP POLICY IF EXISTS "Companions can update their own profile" ON companions;
+DROP POLICY IF EXISTS "Admins have full write access on companions" ON companions;
+
+-- 3. Create non-recursive policies
+CREATE POLICY "Companions are viewable by everyone" ON companions
+  FOR SELECT USING (true);
+
+CREATE POLICY "Authenticated users can onboard themselves as companions" ON companions
+  FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id OR user_id IS NULL OR (auth.jwt() ->> 'email') = 'komailali116@gmail.com');
+
+CREATE POLICY "Companions can update their own profile" ON companions
+  FOR UPDATE TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Admins have full write access on companions" ON companions
+  FOR ALL TO authenticated USING ((auth.jwt() ->> 'email') = 'komailali116@gmail.com')
+  WITH CHECK ((auth.jwt() ->> 'email') = 'komailali116@gmail.com');`}
+                  </pre>
+                </div>
+
+              </div>
+
+              {/* Footer */}
+              <div className="flex justify-end gap-3 pt-4 border-t border-[#E5E1D8]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowRlsModal(false);
+                    setAuditResult(null);
+                  }}
+                  className="px-5 py-2.5 bg-[#1A1C20] hover:bg-[#D4AF37] hover:text-black text-white font-bold rounded-xl transition-all tracking-wider text-[11px] uppercase cursor-pointer"
+                >
+                  Close Monitor Panel
+                </button>
+              </div>
+
             </motion.div>
           </div>
         )}
